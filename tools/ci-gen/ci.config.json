@@ -1,0 +1,92 @@
+{
+  "project": {
+    "name": "continuum",
+    "pythonVersion": "3.12",
+    "nodeVersion": "20"
+  },
+  "github": {
+    "workflowName": "continuum-ci",
+    "workflowFile": ".github/workflows/ci.yml",
+    "manualOnly": true
+  },
+  "circleci": {
+    "configFile": ".circleci/config.yml"
+  },
+  "jobs": [
+    {
+      "id": "lint",
+      "displayName": "Lint",
+      "steps": [
+        "python -m pip install --upgrade pip",
+        "pip install -r requirements.txt",
+        "python -m compileall ."
+      ]
+    },
+    {
+      "id": "unit_tests",
+      "displayName": "Unit Tests",
+      "steps": [
+        "python -m pip install --upgrade pip",
+        "pip install -r requirements.txt",
+        "pytest tests/test_lighting_context.py tests/test_multi_body_lighting.py -v"
+      ]
+    },
+    {
+      "id": "integration_tests",
+      "displayName": "Integration Tests",
+      "steps": [
+        "python -m pip install --upgrade pip",
+        "pip install -r requirements.txt",
+        "pytest tests/test_media_parity_matrix.py tests/test_serve_library.py tests/test_entropy_claims_contract.py -v"
+      ]
+    },
+    {
+      "id": "build_artifacts",
+      "displayName": "Build Artifacts",
+      "steps": [
+        "python -m pip install --upgrade pip",
+        "pip install -r requirements.txt",
+        "python -m compileall .",
+        "python -m zipfile -c continuum_artifacts.zip README.md DEPENDENCIES.md requirements.txt"
+      ]
+    },
+    {
+      "id": "security_scan",
+      "displayName": "Security Scan",
+      "steps": [
+        "python -m pip install --upgrade pip",
+        "pip install pip-audit",
+        "pip-audit -r requirements.txt"
+      ]
+    },
+    {
+      "id": "ci_schema_pact",
+      "displayName": "CI Schema Pact",
+      "steps": [
+        "npm ci",
+        "npm run ci:pact"
+      ]
+    },
+    {
+      "id": "legal_compliance_pact",
+      "displayName": "Legal Compliance Pact",
+      "steps": [
+        "npm ci",
+        "npm run ci:pact:legal"
+      ]
+    }
+  ],
+  "semanticVariants": {
+    "synonymMultipartLimits": [
+      10,
+      25,
+      50
+    ],
+    "promptVersionExpressions": [
+      "word@>1.x",
+      "word@>1.1.x",
+      "word@{1.1.x-2.x}"
+    ],
+    "testCommandTemplate": "pytest tests/test_serve_library.py -v --maxfail=1"
+  }
+}

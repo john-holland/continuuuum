@@ -33,6 +33,7 @@ Open http://localhost:5050. Optional env:
 - `CONTINUUM_DB_PATH` — path to continuum.db (default: ./continuum.db in repo root)
 - `CONTINUUM_LIBRARY_UPLOADS` — uploads directory (default: ./library_uploads)
 - `FLASK_DEBUG=1` — enable debug mode
+- `CONTINUUM_API_KEY` — if set, require this value in `X-API-Key` or `api_key` for `/api/library/*` (see [SECURITY.md](SECURITY.md))
 
 ## Schema
 
@@ -44,6 +45,66 @@ Initialize the continuum DB (creates schema including library_documents):
 
 ```bash
 python -m unified_semantic_archiver init --db ./continuum.db
+```
+
+## Tests
+
+From the continuum repo root, run: `pytest tests/` (requires `pip install pytest`). Smoke tests cover search (200) and upload-then-fetch.
+
+## Policy and Compliance
+
+- Terms draft: [TERMS_OF_SERVICE.md](TERMS_OF_SERVICE.md)
+- Security posture: [SECURITY.md](SECURITY.md)
+- Entropy claims/evidence policy: [docs/ENTROPY_CLAIMS_AND_EVIDENCE_POLICY.md](docs/ENTROPY_CLAIMS_AND_EVIDENCE_POLICY.md)
+- Practical compliance checklist: [docs/LEGAL_COMPLIANCE_CHECKLIST.md](docs/LEGAL_COMPLIANCE_CHECKLIST.md)
+
+## Media Parity (USC + Continuum)
+
+To retire `video_storage_tool`, Continuum tracks feature parity in:
+
+- `library/media_parity_matrix.json`
+- `docs/USC_CONTINUUM_MEDIA_INTERFACE_CONTRACT.md`
+- `docs/VIDEO_STORAGE_TOOL_RETIREMENT_CHECKLIST.md`
+
+Run parity matrix checks with:
+
+```bash
+pytest tests/test_media_parity_matrix.py tests/test_serve_library.py -v
+```
+
+Media parity endpoints exposed by Continuum:
+
+- `POST /api/media/store`
+- `GET /api/media/stored`
+- `GET /api/media/stored/<job_id>/status`
+- `POST /api/media/stored/<job_id>/retry`
+- `POST /api/media/reconstitute`
+- `GET /api/media/stream/<job_id>/info`
+- `GET /api/media/stream/<job_id>`
+- `GET /api/media/settings`
+- `PUT /api/media/settings`
+- `POST /api/media/t2v/download`
+- `GET /api/media/t2v/download/status`
+
+`/api/media/settings` now also exposes USC minimization controls under `minimization.*`, including adapter cohorts and experimental cairn/hyperplane settings:
+
+- `minimization.pipeline.adapter_set`
+- `minimization.experiments.enabled|cohort_key|cohorts`
+- `minimization.adapter_requirements.*` (per-adapter dependencies and fallback)
+- `minimization.cairn.*`
+- `minimization.codec.residual_*` (`cairn_residual_v1`)
+- `minimization.hyperplane.*`
+- `transcript.policy` and `audio_captioning.*` for speech/SFX coverage behavior
+
+Small deterministic media fixture profiles are defined in:
+
+- `tests/media_fixture_specs.json`
+- `tests/fixtures/README.md`
+
+Generate fixtures (optional, for media parity execution) with:
+
+```bash
+python tests/generate_media_fixtures.py
 ```
 
 ## Unity

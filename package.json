@@ -1,0 +1,20 @@
+{
+  "name": "continuum-ci-tooling",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Tooling scripts for Continuum CI generation.",
+  "scripts": {
+    "ci:generate": "node tools/ci-gen/generate-ci.mjs",
+    "ci:check": "node tools/ci-gen/generate-ci.mjs --check",
+    "ci:pact": "node tools/ci-gen/pact-ci-generator.mjs",
+    "ci:pact:legal": "node tools/ci-gen/pact-ci-generator.mjs",
+    "ci:circle:validate": "circleci config validate -c .circleci/config.yml",
+    "ci:circle:local": "circleci local execute --job unit_tests"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "handlebars": "^4.7.8",
+    "js-yaml": "^4.1.0"
+  }
+}

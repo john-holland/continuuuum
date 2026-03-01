@@ -1,0 +1,126 @@
+version: 2.1
+
+jobs:
+  lint:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run:
+          name: Run Lint
+          command: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+            python -m compileall .
+
+  unit_tests:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run:
+          name: Run Unit Tests
+          command: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+            pytest tests/test_lighting_context.py tests/test_multi_body_lighting.py -v
+
+  integration_tests:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run:
+          name: Run Integration Tests
+          command: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+            pytest tests/test_media_parity_matrix.py tests/test_serve_library.py tests/test_entropy_claims_contract.py -v
+
+  build_artifacts:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run:
+          name: Run Build Artifacts
+          command: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+            python -m compileall .
+            python -m zipfile -c continuum_artifacts.zip README.md DEPENDENCIES.md requirements.txt
+
+  security_scan:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run:
+          name: Run Security Scan
+          command: |
+            python -m pip install --upgrade pip
+            pip install pip-audit
+            pip-audit -r requirements.txt
+
+  ci_schema_pact:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run:
+          name: Run CI Schema Pact
+          command: |
+            npm ci
+            npm run ci:pact
+
+  legal_compliance_pact:
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run:
+          name: Run Legal Compliance Pact
+          command: |
+            npm ci
+            npm run ci:pact:legal
+
+  semantic_variant_tests:
+    parameters:
+      synonym_limit:
+        type: integer
+      prompt_expression:
+        type: string
+    docker:
+      - image: cimg/python:3.12
+    steps:
+      - checkout
+      - run:
+          name: Run semantic variant case
+          command: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+            export SYNONYM_MULTIPART_LIMIT="<< parameters.synonym_limit >>"
+            export PROMPT_VERSION_EXPRESSION="<< parameters.prompt_expression >>"
+            pytest tests/test_serve_library.py -v --maxfail=1
+
+workflows:
+  ci:
+    jobs:
+      - lint
+      - unit_tests
+      - integration_tests
+      - build_artifacts
+      - security_scan
+      - ci_schema_pact
+      - legal_compliance_pact
+      - semantic_variant_tests:
+          matrix:
+            parameters:
+              synonym_limit:
+                - 10
+                - 25
+                - 50
+              prompt_expression:
+                - "word@>1.x"
+                - "word@>1.1.x"
+                - "word@{1.1.x-2.x}"

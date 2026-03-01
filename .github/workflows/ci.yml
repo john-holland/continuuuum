@@ -1,0 +1,295 @@
+name: continuum-ci
+
+on:
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run Lint
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m compileall .
+
+  unit_tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run Unit Tests
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest tests/test_lighting_context.py tests/test_multi_body_lighting.py -v
+
+  integration_tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run Integration Tests
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest tests/test_media_parity_matrix.py tests/test_serve_library.py tests/test_entropy_claims_contract.py -v
+
+  build_artifacts:
+    name: Build Artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run Build Artifacts
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          python -m compileall .
+          python -m zipfile -c continuum_artifacts.zip README.md DEPENDENCIES.md requirements.txt
+
+  security_scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run Security Scan
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit
+          pip-audit -r requirements.txt
+
+  ci_schema_pact:
+    name: CI Schema Pact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run CI Schema Pact
+        shell: bash
+        run: |
+          npm ci
+          npm run ci:pact
+
+  legal_compliance_pact:
+    name: Legal Compliance Pact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run Legal Compliance Pact
+        shell: bash
+        run: |
+          npm ci
+          npm run ci:pact:legal
+
+  semantic_variant_0:
+    name: Semantic Variant 0
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run semantic variant case
+        shell: bash
+        env:
+          SYNONYM_MULTIPART_LIMIT: "10"
+          PROMPT_VERSION_EXPRESSION: "word@>1.x"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest tests/test_serve_library.py -v --maxfail=1
+  semantic_variant_1:
+    name: Semantic Variant 1
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run semantic variant case
+        shell: bash
+        env:
+          SYNONYM_MULTIPART_LIMIT: "10"
+          PROMPT_VERSION_EXPRESSION: "word@>1.1.x"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest tests/test_serve_library.py -v --maxfail=1
+  semantic_variant_2:
+    name: Semantic Variant 2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run semantic variant case
+        shell: bash
+        env:
+          SYNONYM_MULTIPART_LIMIT: "10"
+          PROMPT_VERSION_EXPRESSION: "word@{1.1.x-2.x}"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest tests/test_serve_library.py -v --maxfail=1
+  semantic_variant_3:
+    name: Semantic Variant 3
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run semantic variant case
+        shell: bash
+        env:
+          SYNONYM_MULTIPART_LIMIT: "25"
+          PROMPT_VERSION_EXPRESSION: "word@>1.x"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest tests/test_serve_library.py -v --maxfail=1
+  semantic_variant_4:
+    name: Semantic Variant 4
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run semantic variant case
+        shell: bash
+        env:
+          SYNONYM_MULTIPART_LIMIT: "25"
+          PROMPT_VERSION_EXPRESSION: "word@>1.1.x"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest tests/test_serve_library.py -v --maxfail=1
+  semantic_variant_5:
+    name: Semantic Variant 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run semantic variant case
+        shell: bash
+        env:
+          SYNONYM_MULTIPART_LIMIT: "25"
+          PROMPT_VERSION_EXPRESSION: "word@{1.1.x-2.x}"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest tests/test_serve_library.py -v --maxfail=1
+  semantic_variant_6:
+    name: Semantic Variant 6
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run semantic variant case
+        shell: bash
+        env:
+          SYNONYM_MULTIPART_LIMIT: "50"
+          PROMPT_VERSION_EXPRESSION: "word@>1.x"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest tests/test_serve_library.py -v --maxfail=1
+  semantic_variant_7:
+    name: Semantic Variant 7
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run semantic variant case
+        shell: bash
+        env:
+          SYNONYM_MULTIPART_LIMIT: "50"
+          PROMPT_VERSION_EXPRESSION: "word@>1.1.x"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest tests/test_serve_library.py -v --maxfail=1
+  semantic_variant_8:
+    name: Semantic Variant 8
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run semantic variant case
+        shell: bash
+        env:
+          SYNONYM_MULTIPART_LIMIT: "50"
+          PROMPT_VERSION_EXPRESSION: "word@{1.1.x-2.x}"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest tests/test_serve_library.py -v --maxfail=1

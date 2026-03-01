@@ -8,8 +8,12 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import socket
+import statistics
+import time
 import urllib.request
 import urllib.parse
+from datetime import datetime, timezone
 from pathlib import Path
 
 from flask import Flask, request, jsonify, send_file, redirect, Response
@@ -112,6 +116,13 @@ _TENANT_KEYS: dict[str, str] = {}
 _TENANT_KEYS_FILE = (os.environ.get("CONTINUUM_TENANT_KEYS_FILE") or "").strip()
 
 
+ENTROPY_EXTERNAL_PROBES: tuple[tuple[str, str, int], ...] = (
+    ("google_dns_a", "8.8.8.8", 53),
+    ("google_dns_b", "8.8.4.4", 53),
+    ("akamai_edge", "www.akamai.com", 443),
+)
+
+
 def _load_tenant_keys() -> dict[str, str]:
     out: dict[str, str] = {}
     env_json = (os.environ.get("CONTINUUM_TENANT_KEYS") or "").strip()
@@ -205,6 +216,179 @@ def row_to_json(row: dict) -> dict:
         else:
             out[k] = v
     return out
+
+
+def _iso_utc_now() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _tcp_rtt_ms(*, host: str, port: int, timeout_seconds: float) -> float:
+    start = time.perf_counter()
+    with socket.create_connection((host, port), timeout=timeout_seconds):
+        pass
+    return (time.perf_counter() - start) * 1000.0
+
+
+def _loopback_rtt_ms(*, timeout_seconds: float) -> float:
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    listener.settimeout(timeout_seconds)
+    host, port = listener.getsockname()
+    start = time.perf_counter()
+    client = socket.create_connection((host, port), timeout=timeout_seconds)
+    conn, _addr = listener.accept()
+    client.close()
+    conn.close()
+    listener.close()
+    return (time.perf_counter() - start) * 1000.0
+
+
+def _confidence_bounds_ms(series: list[float]) -> tuple[float, float]:
+    if not series:
+        return (0.0, 0.0)
+    ordered = sorted(series)
+    lo_idx = max(0, int(len(ordered) * 0.1) - 1)
+    hi_idx = min(len(ordered) - 1, int(len(ordered) * 0.9))
+    return (ordered[lo_idx], ordered[hi_idx])
+
+
+def _drift_series_ms(series: list[float]) -> list[float]:
+    if len(series) < 2:
+        return []
+    return [series[i] - series[i - 1] for i in range(1, len(series))]
+
+
+def collect_probe_series(
+    *,
+    probe_target: str,
+    probe_class: str,
+    sample_count: int = 5,
+    timeout_seconds: float = 2.0,
+    sample_window_seconds: float = 4.0,
+) -> dict:
+    """
+    Collect live probe RTT measurements and return an evidence bundle.
+    This function is intentionally service-level (directly callable by tests).
+    """
+    if sample_count <= 0:
+        raise ValueError("sample_count must be > 0")
+    if timeout_seconds <= 0:
+        raise ValueError("timeout_seconds must be > 0")
+    if sample_window_seconds <= 0:
+        raise ValueError("sample_window_seconds must be > 0")
+
+    rtt_ms_series: list[float] = []
+    failures: list[str] = []
+    started = time.perf_counter()
+    max_attempts = max(sample_count * 3, sample_count + 2)
+    attempts = 0
+
+    while len(rtt_ms_series) < sample_count and attempts < max_attempts:
+        attempts += 1
+        try:
+            if probe_class == "localhost_loopback":
+                rtt = _loopback_rtt_ms(timeout_seconds=timeout_seconds)
+            else:
+                host, port_txt = probe_target.rsplit(":", 1)
+                rtt = _tcp_rtt_ms(host=host, port=int(port_txt), timeout_seconds=timeout_seconds)
+            rtt_ms_series.append(round(rtt, 6))
+        except OSError as exc:
+            failures.append(f"{type(exc).__name__}: {exc}")
+        if (time.perf_counter() - started) >= sample_window_seconds:
+            break
+        time.sleep(0.05)
+
+    if len(rtt_ms_series) < sample_count:
+        raise RuntimeError(
+            "insufficient live samples for probe "
+            f"{probe_class} ({probe_target}): got {len(rtt_ms_series)}/{sample_count}; "
+            f"failures={failures[:3]}"
+        )
+
+    drift_series = _drift_series_ms(rtt_ms_series)
+    mean_rtt = statistics.fmean(rtt_ms_series)
+    variance = statistics.pvariance(rtt_ms_series) if len(rtt_ms_series) > 1 else 0.0
+    c_lo, c_hi = _confidence_bounds_ms(rtt_ms_series)
+
+    return {
+        "probe_target": probe_target,
+        "probe_class": probe_class,
+        "timestamp_source": "datetime.now(timezone.utc)+time.perf_counter",
+        "sample_window_seconds": sample_window_seconds,
+        "sample_count": len(rtt_ms_series),
+        "timeout_seconds": timeout_seconds,
+        "rtt_ms_series": rtt_ms_series,
+        "rtt_mean_ms": round(mean_rtt, 6),
+        "rtt_variance_ms2": round(variance, 6),
+        "drift_series_ms": [round(x, 6) for x in drift_series],
+        "confidence_bounds_ms": [round(c_lo, 6), round(c_hi, 6)],
+        "failure_handling": "failed attempts logged and run fails if sample minimum is not met",
+        "captured_at_utc": _iso_utc_now(),
+    }
+
+
+def collect_entropy_probe_evidence(
+    *,
+    sample_count: int = 5,
+    timeout_seconds: float = 2.0,
+    sample_window_seconds: float = 4.0,
+) -> dict:
+    """
+    Collect external (Google DNS + Akamai edge) and localhost control evidence.
+    """
+    google_a = collect_probe_series(
+        probe_target=f"{ENTROPY_EXTERNAL_PROBES[0][1]}:{ENTROPY_EXTERNAL_PROBES[0][2]}",
+        probe_class="google_dns",
+        sample_count=sample_count,
+        timeout_seconds=timeout_seconds,
+        sample_window_seconds=sample_window_seconds,
+    )
+    google_b = collect_probe_series(
+        probe_target=f"{ENTROPY_EXTERNAL_PROBES[1][1]}:{ENTROPY_EXTERNAL_PROBES[1][2]}",
+        probe_class="google_dns",
+        sample_count=sample_count,
+        timeout_seconds=timeout_seconds,
+        sample_window_seconds=sample_window_seconds,
+    )
+    akamai = collect_probe_series(
+        probe_target=f"{ENTROPY_EXTERNAL_PROBES[2][1]}:{ENTROPY_EXTERNAL_PROBES[2][2]}",
+        probe_class="akamai_edge",
+        sample_count=sample_count,
+        timeout_seconds=timeout_seconds,
+        sample_window_seconds=sample_window_seconds,
+    )
+    localhost = collect_probe_series(
+        probe_target="127.0.0.1",
+        probe_class="localhost_loopback",
+        sample_count=sample_count,
+        timeout_seconds=timeout_seconds,
+        sample_window_seconds=sample_window_seconds,
+    )
+
+    external_means = [google_a["rtt_mean_ms"], google_b["rtt_mean_ms"], akamai["rtt_mean_ms"]]
+    external_vars = [google_a["rtt_variance_ms2"], google_b["rtt_variance_ms2"], akamai["rtt_variance_ms2"]]
+    external_mean = float(statistics.fmean(external_means))
+    external_var = float(statistics.fmean(external_vars))
+    local_mean = float(localhost["rtt_mean_ms"])
+    local_var = float(localhost["rtt_variance_ms2"])
+
+    return {
+        "captured_at_utc": _iso_utc_now(),
+        "series": {
+            "google_dns_a": google_a,
+            "google_dns_b": google_b,
+            "akamai_edge": akamai,
+            "localhost_loopback": localhost,
+        },
+        "comparison": {
+            "external_mean_rtt_ms": round(external_mean, 6),
+            "external_variance_ms2": round(external_var, 6),
+            "localhost_mean_rtt_ms": round(local_mean, 6),
+            "localhost_variance_ms2": round(local_var, 6),
+            "mean_gap_external_minus_local_ms": round(external_mean - local_mean, 6),
+        },
+    }
 
 
 def _parse_range(header: str | None, total: int) -> tuple[int, int] | None:
@@ -332,11 +516,24 @@ def upload():
         type_metadata["lighting_rollout_flags"]["enable_lunar_context"] = include_lunar
         if compute_lighting and lat is not None and lon is not None:
             try:
+                rollout = type_metadata.get("lighting_rollout_flags") or {}
+                if not isinstance(rollout, dict):
+                    rollout = {}
+                rollout.setdefault("enable_shadow_time_inference", True)
+                rollout.setdefault("enable_image_edge_analysis", True)
+                rollout.setdefault("camera_facing_default", "north")
+                type_metadata["lighting_rollout_flags"] = rollout
+                image_path = None
+                if blob_ref and document_type == "image":
+                    candidate = UPLOADS_DIR / blob_ref
+                    if candidate.is_file():
+                        image_path = candidate
                 type_metadata["lighting_context"] = get_lighting_context_service().compute(
                     lat=float(lat),
                     lon=float(lon),
                     altitude_m=altitude_m,
                     metadata=type_metadata,
+                    image_path=image_path,
                 )
             except Exception:
                 # Upload should not fail when external weather lookup fails.
@@ -394,11 +591,18 @@ def get_document_lighting(doc_id: int):
         lon = row.get("lon")
         if lat is None or lon is None:
             return jsonify({"error": "lat/lon required for lighting context"}), 400
+        image_path = None
+        blob_ref = row.get("blob_ref")
+        if blob_ref and (row.get("document_type") or "").lower() == "image":
+            candidate = UPLOADS_DIR / blob_ref
+            if candidate.is_file():
+                image_path = candidate
         result = get_lighting_context_service().compute(
             lat=float(lat),
             lon=float(lon),
             altitude_m=row.get("altitude_m"),
             metadata=type_metadata,
+            image_path=image_path,
         )
         return jsonify(result)
     except Exception as e:
