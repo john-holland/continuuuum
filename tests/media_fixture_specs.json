@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "profiles": [
+    {
+      "id": "audio_heavy_short",
+      "description": "Mostly static video, richer audio content for transcript/audio parity checks.",
+      "output_file": "audio_heavy_4s.mp4",
+      "duration_sec": 4.0,
+      "width": 320,
+      "height": 240,
+      "fps": 24,
+      "max_size_mb": 3.0
+    },
+    {
+      "id": "video_heavy_short",
+      "description": "High-motion synthetic test pattern to stress visual diff/reconstruct paths.",
+      "output_file": "video_heavy_4s.mp4",
+      "duration_sec": 4.0,
+      "width": 640,
+      "height": 360,
+      "fps": 30,
+      "max_size_mb": 6.0
+    },
+    {
+      "id": "image_source",
+      "description": "Single source image used for image-origin pipeline tests.",
+      "output_file": "image_source.png",
+      "width": 640,
+      "height": 360,
+      "max_size_mb": 1.5
+    }
+  ]
+}

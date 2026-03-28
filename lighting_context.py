@@ -278,27 +278,262 @@ class MoonPositionCalculator:
         }
 
 
+def _camera_facing_to_azimuth_deg(facing: str | float | None) -> float:
+    """Map camera facing to world azimuth (0=north, 90=east, 180=south, 270=west)."""
+    if facing is None:
+        return 0.0
+    if isinstance(facing, (int, float)):
+        return float(facing) % 360.0
+    s = str(facing).strip().lower()
+    if s == "north":
+        return 0.0
+    if s == "east":
+        return 90.0
+    if s == "south":
+        return 180.0
+    if s == "west":
+        return 270.0
+    return 0.0
+
+
+class ShadowGeometrySolver:
+    """
+    Pure logic for shadow-direction <-> time mapping.
+    Shadows point away from the sun. Sun rises east (~90°), sets west (~270°).
+    Northern hemisphere: facing north, morning -> shadows left (west); afternoon -> shadows right (east).
+    """
+
+    def __init__(self, sun_calculator: type = SunPositionCalculator):
+        self._sun = sun_calculator
+
+    def sunrise_sunset_utc(
+        self,
+        *,
+        lat_deg: float,
+        lon_deg: float,
+        date_utc: dt.datetime,
+    ) -> tuple[dt.datetime, dt.datetime]:
+        """Return (sunrise_utc, sunset_utc) for the given date at the location."""
+        day_start = date_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        if day_start.tzinfo is None:
+            day_start = day_start.replace(tzinfo=dt.timezone.utc)
+        # Binary search for elevation crossing 0
+        lo, hi = 0.0, 24.0
+        for _ in range(30):
+            mid = (lo + hi) / 2.0
+            t = day_start + dt.timedelta(hours=mid)
+            el = float(self._sun.compute(lat_deg=lat_deg, lon_deg=lon_deg, when_utc=t)["sun_elevation_deg"])
+            if el < 0:
+                lo = mid
+            else:
+                hi = mid
+        sunrise_h = (lo + hi) / 2.0
+        lo, hi = 12.0, 24.0
+        for _ in range(30):
+            mid = (lo + hi) / 2.0
+            t = day_start + dt.timedelta(hours=mid)
+            el = float(self._sun.compute(lat_deg=lat_deg, lon_deg=lon_deg, when_utc=t)["sun_elevation_deg"])
+            if el > 0:
+                lo = mid
+            else:
+                hi = mid
+        sunset_h = (lo + hi) / 2.0
+        return (
+            day_start + dt.timedelta(hours=sunrise_h),
+            day_start + dt.timedelta(hours=sunset_h),
+        )
+
+    def shadow_direction_for_time(
+        self,
+        *,
+        lat_deg: float,
+        lon_deg: float,
+        when_utc: dt.datetime,
+    ) -> float:
+        """Shadow azimuth (deg, world) at given time. Shadow points away from sun."""
+        sun = self._sun.compute(lat_deg=lat_deg, lon_deg=lon_deg, when_utc=when_utc)
+        sun_az = float(sun["sun_azimuth_deg"])
+        return (sun_az + 180.0) % 360.0
+
+    def estimate_time_from_shadow_direction(
+        self,
+        *,
+        lat_deg: float,
+        lon_deg: float,
+        date_utc: dt.datetime,
+        shadow_azimuth_world_deg: float,
+        camera_facing_deg: float = 0.0,
+        tolerance_deg: float = 15.0,
+    ) -> dt.datetime | None:
+        """
+        Find when_utc on date such that predicted shadow direction matches detected.
+        Returns estimated capture time or None if no plausible match.
+        """
+        sunrise, sunset = self.sunrise_sunset_utc(lat_deg=lat_deg, lon_deg=lon_deg, date_utc=date_utc)
+        day_start = date_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        if day_start.tzinfo is None:
+            day_start = day_start.replace(tzinfo=dt.timezone.utc)
+        sr_h = (sunrise - day_start).total_seconds() / 3600.0
+        ss_h = (sunset - day_start).total_seconds() / 3600.0
+        if sr_h >= ss_h:
+            return None
+        best_t = None
+        best_err = 360.0
+        # Sample hours through the day
+        steps = max(24, int((ss_h - sr_h) * 2))
+        for i in range(steps + 1):
+            h = sr_h + (ss_h - sr_h) * i / max(1, steps)
+            t = day_start + dt.timedelta(hours=h)
+            pred_shadow = self.shadow_direction_for_time(lat_deg=lat_deg, lon_deg=lon_deg, when_utc=t)
+            err = min(
+                abs((pred_shadow - shadow_azimuth_world_deg) % 360.0),
+                abs((shadow_azimuth_world_deg - pred_shadow) % 360.0),
+            )
+            if err < best_err:
+                best_err = err
+                best_t = t
+        if best_t is not None and best_err <= tolerance_deg:
+            return best_t
+        return best_t if best_t and best_err <= 45.0 else None
+
+
+def _detect_shadow_direction_from_image(
+    image_path: str | Path | None = None,
+    image_array: object = None,
+    *,
+    crop_top_ratio: float = 0.3,
+    camera_facing_deg: float = 0.0,
+) -> tuple[float, float] | None:
+    """
+    Analyze upper region of image for edge/contrast to infer shadow direction.
+    Returns (dominant_azimuth_world_deg, confidence) or None.
+    Image frame: 0° = right, 90° = down. Map to world using camera_facing_deg (0=north).
+    """
+    try:
+        import numpy as np
+        from PIL import Image
+    except ImportError:
+        return None
+    img = None
+    if image_path is not None:
+        path = Path(image_path) if not isinstance(image_path, Path) else image_path
+        if path.is_file():
+            try:
+                img = Image.open(path).convert("L")
+            except Exception:
+                return None
+    elif image_array is not None and hasattr(image_array, "shape"):
+        try:
+            arr = np.asarray(image_array)
+            if len(arr.shape) >= 2:
+                if len(arr.shape) == 3:
+                    arr = np.mean(arr, axis=2)
+                img = Image.fromarray(arr.astype(np.uint8))
+        except Exception:
+            return None
+    if img is None:
+        return None
+    w, h = img.size
+    crop_h = int(h * crop_top_ratio)
+    if crop_h < 4:
+        return None
+    top = np.array(img.crop((0, 0, w, crop_h)))
+    # Simple gradient magnitude and direction
+    gy = np.zeros_like(top, dtype=float)
+    gx = np.zeros_like(top, dtype=float)
+    gy[:-1, :] = np.diff(top.astype(float), axis=0)
+    gx[:, :-1] = np.diff(top.astype(float), axis=1)
+    mag = np.sqrt(gx * gx + gy * gy)
+    if mag.max() < 1e-6:
+        return None
+    # Dominant edge direction: perpendicular to gradient points along edge
+    angles_deg = np.degrees(np.arctan2(gy, gx))
+    angles_deg = (angles_deg + 90.0) % 360.0
+    hist, bin_edges = np.histogram(angles_deg.flatten(), bins=36, range=(0, 360), weights=mag.flatten())
+    dominant_bin = int(np.argmax(hist))
+    dominant_angle_image = (bin_edges[dominant_bin] + bin_edges[dominant_bin + 1]) / 2.0
+    confidence = min(0.7, 0.2 + 0.1 * (hist[dominant_bin] / (mag.sum() / 36 + 1e-9)))
+    # Map image angle to world: image 0°=right (east if camera north), 90°=down (south)
+    # Camera facing north: image right = east = 90°, image left = west = 270°
+    # Shadow direction in image: dominant_angle_image is edge direction; shadow points opposite to light
+    shadow_image_deg = (dominant_angle_image + 180.0) % 360.0
+    world_offset = camera_facing_deg
+    world_az = (shadow_image_deg + (90.0 - world_offset)) % 360.0
+    return (world_az, _clamp(confidence, 0.0, 1.0))
+
+
 class SunPlaneSurfaceAnalyzer:
     """
     Fallback 2C estimator:
     infer sun direction from available surface/shadow hints in asset metadata.
+    Supports datetime-aware sun position and shadow-geometry time inference.
     """
 
-    def infer(self, metadata: dict) -> tuple[tuple[float, float, float] | None, float, list[str]]:
+    def __init__(
+        self,
+        sun_calculator: type = SunPositionCalculator,
+        shadow_solver: ShadowGeometrySolver | None = None,
+    ):
+        self._sun = sun_calculator
+        self._shadow_solver = shadow_solver or ShadowGeometrySolver(sun_calculator=sun_calculator)
+
+    def _extract_lat_lon_when(self, metadata: dict) -> tuple[float | None, float | None, dt.datetime | None]:
+        loc = metadata.get("asset_location") or {}
+        if isinstance(loc, dict):
+            lat = loc.get("lat")
+            lon = loc.get("lon")
+        else:
+            lat = metadata.get("lat")
+            lon = metadata.get("lon")
+        when = _parse_datetime_utc(
+            metadata.get("capture_datetime_utc")
+            or metadata.get("capture_datetime")
+            or metadata.get("asset_date")
+            or metadata.get("timestamp_utc")
+        )
+        lat_f = float(lat) if lat is not None else None
+        lon_f = float(lon) if lon is not None else None
+        return lat_f, lon_f, when
+
+    def infer(
+        self,
+        metadata: dict,
+        *,
+        lat: float | None = None,
+        lon: float | None = None,
+        when_utc: dt.datetime | None = None,
+    ) -> tuple[tuple[float, float, float] | None, float, list[str], dict]:
+        """
+        Infer sun direction. Returns (direction_vector, confidence, reasons, extras).
+        extras may include: daytime_lit, estimated_capture_time_utc, time_inference_source.
+        """
         reasons: list[str] = []
+        extras: dict = {}
+        lat = lat if lat is not None else (metadata.get("asset_location") or {}).get("lat") if isinstance(metadata.get("asset_location"), dict) else metadata.get("lat")
+        lon = lon if lon is not None else (metadata.get("asset_location") or {}).get("lon") if isinstance(metadata.get("asset_location"), dict) else metadata.get("lon")
+        when = when_utc or _parse_datetime_utc(metadata.get("capture_datetime_utc") or metadata.get("capture_datetime") or metadata.get("asset_date"))
+
+        # Datetime + lat/lon: use sun position
+        if lat is not None and lon is not None and when is not None:
+            sun = self._sun.compute(lat_deg=float(lat), lon_deg=float(lon), when_utc=when)
+            elevation = float(sun["sun_elevation_deg"])
+            extras["daytime_lit"] = elevation > 0.0
+            direction = sun["sun_direction_vector_world"]
+            reasons.append("sun_position_from_datetime")
+            return _norm(direction), 0.85 if elevation > 0 else 0.5, reasons, extras
+
         # Highest confidence: explicit inferred direction already present.
         direct = _parse_vec3(metadata.get("inferred_sun_direction_vector"))
         if direct:
-            return _norm(direct), 0.9, ["metadata_inferred_sun_direction_vector"]
+            return _norm(direct), 0.9, ["metadata_inferred_sun_direction_vector"], extras
 
         shadow = _parse_vec3(metadata.get("shadow_vector") or metadata.get("dominant_shadow_direction"))
         plane_normal = _parse_vec3(metadata.get("sun_plane_normal") or metadata.get("dominant_surface_normal"))
         if shadow and plane_normal:
-            # light roughly opposite shadow and above surface.
             shadow_n = _norm(shadow)
             normal_n = _norm(plane_normal)
             candidate = _norm((-shadow_n[0], abs(normal_n[1]) + 0.2, -shadow_n[2]))
-            return candidate, 0.72, ["shadow_vector", "surface_normal"]
+            return candidate, 0.72, ["shadow_vector", "surface_normal"], extras
 
         shadows = metadata.get("shadow_vectors")
         normals = metadata.get("surface_normals")
@@ -321,8 +556,87 @@ class SunPlaneSurfaceAnalyzer:
                     )
                 )
                 reasons.append("aggregate_shadow_surface_samples")
-                return avg, _clamp(0.45 + 0.05 * len(samples), 0.45, 0.8), reasons
-        return None, 0.0, reasons
+                return avg, _clamp(0.45 + 0.05 * len(samples), 0.45, 0.8), reasons, extras
+        return None, 0.0, reasons, extras
+
+    def infer_with_image(
+        self,
+        metadata: dict,
+        *,
+        image_path: str | Path | None = None,
+        image_array: object = None,
+        lat: float | None = None,
+        lon: float | None = None,
+        when_utc: dt.datetime | None = None,
+        enable_shadow_time_inference: bool = True,
+        enable_image_edge_analysis: bool = True,
+        camera_facing_default: str = "north",
+    ) -> tuple[tuple[float, float, float] | None, float, list[str], dict]:
+        """
+        Infer sun direction, optionally using image edge analysis and shadow geometry time estimation.
+        Returns (direction_vector, confidence, reasons, extras).
+        extras: daytime_lit, estimated_capture_time_utc, time_inference_source.
+        """
+        lat_f, lon_f, when = self._extract_lat_lon_when(metadata)
+        lat = lat or lat_f
+        lon = lon or lon_f
+        when = when or when_utc
+        extras: dict = {}
+        camera_facing = _camera_facing_to_azimuth_deg(
+            metadata.get("camera_facing_deg") or metadata.get("camera_facing") or camera_facing_default
+        )
+
+        # Image edge analysis
+        detected_shadow_az: float | None = None
+        if enable_image_edge_analysis and (image_path or image_array):
+            det = _detect_shadow_direction_from_image(
+                image_path=image_path,
+                image_array=image_array,
+                crop_top_ratio=0.3,
+                camera_facing_deg=camera_facing,
+            )
+            if det:
+                detected_shadow_az, edge_conf = det
+                extras["daytime_lit"] = True
+                extras["shadow_detection_confidence"] = edge_conf
+
+        # Time estimation from shadow when date known but time nominal
+        estimated_when: dt.datetime | None = None
+        if (
+            enable_shadow_time_inference
+            and lat is not None
+            and lon is not None
+            and when is not None
+            and detected_shadow_az is not None
+        ):
+            date_utc = when.replace(hour=12, minute=0, second=0, microsecond=0)
+            est = self._shadow_solver.estimate_time_from_shadow_direction(
+                lat_deg=lat,
+                lon_deg=lon,
+                date_utc=date_utc,
+                shadow_azimuth_world_deg=detected_shadow_az,
+                camera_facing_deg=camera_facing,
+            )
+            if est is not None:
+                estimated_when = est
+                extras["estimated_capture_time_utc"] = est.isoformat().replace("+00:00", "Z")
+                extras["time_inference_source"] = "shadow_geometry"
+                when = est
+
+        # Primary inference with lat/lon/when
+        direction, conf, reasons, infer_extras = self.infer(metadata, lat=lat, lon=lon, when_utc=when)
+        extras.update(infer_extras)
+
+        if detected_shadow_az is not None and "shadow_detection_confidence" not in extras:
+            extras["shadow_detection_confidence"] = 0.4
+
+        if estimated_when is not None and direction is None and lat is not None and lon is not None:
+            sun = self._sun.compute(lat_deg=lat, lon_deg=lon, when_utc=estimated_when)
+            direction = sun["sun_direction_vector_world"]
+            reasons.append("sun_position_from_shadow_time_estimate")
+            conf = max(conf, 0.6)
+
+        return direction, conf, reasons, extras
 
 
 class LightingValidator:
@@ -414,7 +728,7 @@ class LightingContextService:
         confidence = float(conf) if isinstance(conf, (int, float)) else (0.85 if vec else 0.0)
         return (_norm(vec) if vec else None), _clamp(confidence, 0.0, 1.0)
 
-    def compute(self, *, lat: float, lon: float, altitude_m: float | None = None, metadata: dict | None = None) -> dict:
+    def compute(self, *, lat: float, lon: float, altitude_m: float | None = None, metadata: dict | None = None, image_path: str | Path | None = None) -> dict:
         metadata = dict(metadata or {})
         rollout = metadata.get("lighting_rollout_flags")
         if not isinstance(rollout, dict):
@@ -422,13 +736,44 @@ class LightingContextService:
         enable_surface_inference = _to_bool(rollout.get("enable_surface_inference"), True)
         enable_ml_validation = _to_bool(rollout.get("enable_ml_validation"), True)
         enable_lunar_context = _to_bool(rollout.get("enable_lunar_context"), True)
+        enable_shadow_time_inference = _to_bool(rollout.get("enable_shadow_time_inference"), True)
+        enable_image_edge_analysis = _to_bool(rollout.get("enable_image_edge_analysis"), True)
+        camera_facing_default = str(rollout.get("camera_facing_default") or "north")
+
         when_utc = self._extract_datetime(metadata)
+        existing_loc = metadata.get("asset_location") or {}
+        if not isinstance(existing_loc, dict):
+            existing_loc = {}
+        meta_with_loc = {**metadata, "asset_location": {**existing_loc, "lat": lat, "lon": lon}}
+        meta_with_loc["capture_datetime_utc"] = when_utc.isoformat().replace("+00:00", "Z")
+
         sun = self._sun.compute(lat_deg=lat, lon_deg=lon, when_utc=when_utc)
         expected_direction = sun["sun_direction_vector_world"]
         moon = self._moon.compute(lat_deg=lat, lon_deg=lon, when_utc=when_utc) if enable_lunar_context else None
 
         md_vec, md_conf = self._extract_metadata_direction(metadata)
-        inferred_vec, inferred_conf, inferred_reasons = ((None, 0.0, []) if not enable_surface_inference else self._analyzer.infer(metadata))
+        inferred_vec, inferred_conf, inferred_reasons, infer_extras = (None, 0.0, [], {})
+        if enable_surface_inference:
+            img_path = image_path
+            if img_path is None and (metadata.get("image_path") or metadata.get("file_path")):
+                img_path = Path(metadata.get("image_path") or metadata.get("file_path") or "")
+            if img_path is not None and not isinstance(img_path, Path):
+                img_path = Path(img_path)
+            if (enable_shadow_time_inference or enable_image_edge_analysis) and img_path is not None and Path(img_path).is_file():
+                result = self._analyzer.infer_with_image(
+                    meta_with_loc,
+                    image_path=img_path,
+                    lat=lat,
+                    lon=lon,
+                    when_utc=when_utc,
+                    enable_shadow_time_inference=enable_shadow_time_inference,
+                    enable_image_edge_analysis=enable_image_edge_analysis,
+                    camera_facing_default=camera_facing_default,
+                )
+                inferred_vec, inferred_conf, inferred_reasons, infer_extras = result
+            else:
+                result = self._analyzer.infer(meta_with_loc, lat=lat, lon=lon, when_utc=when_utc)
+                inferred_vec, inferred_conf, inferred_reasons, infer_extras = result
 
         chosen = md_vec or inferred_vec or expected_direction
         source = "metadata" if md_vec else ("inferred_surface" if inferred_vec else "calculated")
@@ -446,10 +791,13 @@ class LightingContextService:
         )
         sun_elevation = float(sun["sun_elevation_deg"])
         sun_visible = bool(sun_elevation > 0.0)
+        daytime_lit = infer_extras.get("daytime_lit")
+        if daytime_lit is None:
+            daytime_lit = sun_visible
         moon_elevation = float(moon["moon_elevation_deg"]) if moon is not None else None
         moon_visible = bool(moon_elevation is not None and moon_elevation > 0.0)
 
-        return {
+        out: dict = {
             "sun_azimuth_deg": round(float(sun["sun_azimuth_deg"]), 4),
             "sun_elevation_deg": round(float(sun["sun_elevation_deg"]), 4),
             "sun_visibility": sun_visible,
@@ -461,6 +809,7 @@ class LightingContextService:
             else None,
             "inferred_sun_direction_confidence": round(inferred_conf, 4) if inferred_vec else 0.0,
             "inferred_sun_direction_reasons": inferred_reasons,
+            "daytime_lit": bool(daytime_lit),
             "weather_snapshot": weather.to_dict(),
             "capture_datetime_utc": when_utc.isoformat().replace("+00:00", "Z"),
             "asset_location": {"lat": lat, "lon": lon, "altitude_m": altitude_m},
@@ -484,9 +833,19 @@ class LightingContextService:
                 "enable_surface_inference": enable_surface_inference,
                 "enable_ml_validation": enable_ml_validation,
                 "enable_lunar_context": enable_lunar_context,
+                "enable_shadow_time_inference": enable_shadow_time_inference,
+                "enable_image_edge_analysis": enable_image_edge_analysis,
+                "camera_facing_default": camera_facing_default,
             },
             **validation,
         }
+        if infer_extras.get("estimated_capture_time_utc"):
+            out["estimated_capture_time_utc"] = infer_extras["estimated_capture_time_utc"]
+        if infer_extras.get("time_inference_source"):
+            out["time_inference_source"] = infer_extras["time_inference_source"]
+        if infer_extras.get("shadow_detection_confidence") is not None:
+            out["shadow_detection_confidence"] = round(float(infer_extras["shadow_detection_confidence"]), 4)
+        return out
 
     def query_lighting(
         self,

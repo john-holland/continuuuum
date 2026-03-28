@@ -1,0 +1,16 @@
+# Continuum library server + Entropythief ring.
+# Install: conda env create -f conda-environment.yml
+# Activate: conda activate continuum
+# Then: pip install -e C:\Users\John\unified-semantic-compressor
+name: continuum
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+    - flask>=3.0.0
+    - Pillow>=10.0.0
+    - numpy>=1.24.0
+    - pytest>=7.0.0

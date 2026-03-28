@@ -247,7 +247,7 @@ def test_document_lighting_recompute_endpoint(monkeypatch):
     import serve_library as module
 
     class _FakeLightingService:
-        def compute(self, *, lat, lon, altitude_m=None, metadata=None):
+        def compute(self, *, lat, lon, altitude_m=None, metadata=None, image_path=None, **kwargs):
             return {
                 "sun_direction_source": "calculated",
                 "sun_azimuth_deg": 201.0,
@@ -292,7 +292,7 @@ def test_lighting_estimate_include_lunar_overrides_rollout(monkeypatch):
     captured = {}
 
     class _FakeLightingService:
-        def compute(self, *, lat, lon, altitude_m=None, metadata=None):
+        def compute(self, *, lat, lon, altitude_m=None, metadata=None, image_path=None, **kwargs):
             captured["metadata"] = metadata
             return {"moon_visibility": False}
 

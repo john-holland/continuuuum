@@ -1,0 +1,43 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../Drawer 2"
+		},
+		{
+			"path": "../unified-semantic-compressor"
+		},
+		{
+			"path": "D:/Development/log-view-machine"
+		}
+	],
+	"settings": {
+		"dotrush.roslyn.projectOrSolutionFiles": [
+			"c:\\Users\\John\\Drawer 2\\Drawer 2.sln",
+			"c:\\Users\\John\\Drawer 2\\Drawer 2.slnx",
+			"c:\\Users\\John\\Drawer 2\\Drawer.sln",
+			"c:\\Users\\John\\Drawer 2\\Assembly-CSharp-Editor.csproj",
+			"c:\\Users\\John\\Drawer 2\\Assembly-CSharp.csproj",
+			"c:\\Users\\John\\Drawer 2\\BedogaGenerator.csproj",
+			"c:\\Users\\John\\Drawer 2\\BedogaGenerator.Editor.csproj",
+			"c:\\Users\\John\\Drawer 2\\Generated.Editor.csproj",
+			"c:\\Users\\John\\Drawer 2\\Generated.Runtime.csproj",
+			"c:\\Users\\John\\Drawer 2\\Generated.Tests.csproj",
+			"c:\\Users\\John\\Drawer 2\\HierarchicalPathFinding.csproj",
+			"c:\\Users\\John\\Drawer 2\\Locomotion.Audio.csproj",
+			"c:\\Users\\John\\Drawer 2\\Locomotion.Editor.csproj",
+			"c:\\Users\\John\\Drawer 2\\Locomotion.Narrative.Editor.csproj",
+			"c:\\Users\\John\\Drawer 2\\Locomotion.Narrative.Inference.csproj",
+			"c:\\Users\\John\\Drawer 2\\Locomotion.Narrative.Runtime.csproj",
+			"c:\\Users\\John\\Drawer 2\\Locomotion.Narrative.Serialization.csproj",
+			"c:\\Users\\John\\Drawer 2\\Locomotion.Runtime.csproj",
+			"c:\\Users\\John\\Drawer 2\\Locomotion.Tests.csproj",
+			"c:\\Users\\John\\Drawer 2\\SystemDrawer.csproj",
+			"c:\\Users\\John\\Drawer 2\\Weather.Editor.csproj",
+			"c:\\Users\\John\\Drawer 2\\Weather.Runtime.csproj",
+			"c:\\Users\\John\\Drawer 2\\Weather.Tests.csproj"
+		]
+	}
+}

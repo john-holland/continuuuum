@@ -108,6 +108,8 @@ UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 _db: ContinuumDb | None = None
 _media_service = None
 _lighting_context_service: LightingContextService | None = None
+_orchestrator = None
+_credit_ledger = None
 
 # Per-tenant API keys: env CONTINUUM_TENANT_KEYS='{"tenant1":"key1"}' and/or file CONTINUUM_TENANT_KEYS_FILE.
 # Global CONTINUUM_API_KEY is used when the request tenant has no per-tenant key (backward compatible).
@@ -198,6 +200,22 @@ def get_lighting_context_service() -> LightingContextService:
         except Exception:
             _lighting_context_service = LightingContextService()
     return _lighting_context_service
+
+
+def get_entropy_orchestrator():
+    global _orchestrator
+    if _orchestrator is None:
+        from entropy import RingOrchestrator
+        _orchestrator = RingOrchestrator(get_db())
+    return _orchestrator
+
+
+def get_credit_ledger():
+    global _credit_ledger
+    if _credit_ledger is None:
+        from entropy.credit_ledger import CreditLedger
+        _credit_ledger = CreditLedger(get_db())
+    return _credit_ledger
 
 
 def _as_bool(raw: object, default: bool = False) -> bool:
@@ -1049,6 +1067,189 @@ def astral_ingest_status(job_id: int):
         if not job:
             return jsonify({"error": "Not found"}), 404
         return jsonify(row_to_json(job))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+# --- Entropy API (ring, center, credits, random) ---
+
+
+def _entropy_available() -> bool:
+    return hasattr(get_db(), "entropy_credits_get")
+
+
+@app.route("/api/entropy/nodes/register", methods=["POST"])
+def entropy_nodes_register():
+    if not _entropy_available():
+        return jsonify({"error": "Entropy API requires USC with entropy schema"}), 503
+    try:
+        body = request.get_json(silent=True) or {}
+        probe_target = (body.get("probe_target") or "").strip()
+        tenant_id = (body.get("tenant_id") or get_tenant_from_request() or "default").strip()
+        base_url = (body.get("base_url") or "").strip() or None
+        if not probe_target:
+            return jsonify({"error": "probe_target required"}), 400
+        orch = get_entropy_orchestrator()
+        node_id = orch.add_node(probe_target=probe_target, tenant_id=tenant_id, base_url=base_url)
+        return jsonify({"node_id": node_id, "tenant_id": tenant_id}), 201
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/entropy/center", methods=["GET"])
+def entropy_center():
+    if not _entropy_available():
+        return jsonify({"error": "Entropy API requires USC with entropy schema"}), 503
+    try:
+        orch = get_entropy_orchestrator()
+        center = orch.center.get_authoritative_center()
+        return jsonify({"center_hex": center.hex()}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/entropy/guess", methods=["POST"])
+def entropy_guess():
+    if not _entropy_available():
+        return jsonify({"error": "Entropy API requires USC with entropy schema"}), 503
+    try:
+        body = request.get_json(silent=True) or {}
+        node_id = (body.get("node_id") or "").strip()
+        guess_payload = body.get("guess_payload") or body
+        if not node_id:
+            return jsonify({"error": "node_id required"}), 400
+        orch = get_entropy_orchestrator()
+        orch.center.accept_guess(node_id, guess_payload)
+        orch.registry.update_last_seen(node_id)
+        return jsonify({"ok": True}), 202
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/entropy/ring", methods=["GET"])
+def entropy_ring():
+    if not _entropy_available():
+        return jsonify({"error": "Entropy API requires USC with entropy schema"}), 503
+    try:
+        orch = get_entropy_orchestrator()
+        node_id = request.args.get("node_id")
+        if node_id:
+            next_id = orch.next_node_id(node_id)
+            return jsonify({"node_id": node_id, "next_node_id": next_id}), 200
+        return jsonify({"ring_order": orch.ring_order}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/entropy/nodes", methods=["GET"])
+def entropy_nodes():
+    if not _entropy_available():
+        return jsonify({"error": "Entropy API requires USC with entropy schema"}), 503
+    try:
+        orch = get_entropy_orchestrator()
+        active = orch.registry.list_active(tenant_id=request.args.get("tenant_id"))
+        warehouse = orch.registry.list_warehouse(tenant_id=request.args.get("tenant_id"))
+        return jsonify({
+            "active": [dict(r) for r in active],
+            "warehouse": [dict(r) for r in warehouse],
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/entropy/nodes/tombstone", methods=["POST"])
+@app.route("/api/entropy/nodes/mezz", methods=["POST"])
+def entropy_nodes_tombstone():
+    """Client-initiated tombstone: mark node as mezzed (unfocus/suspend)."""
+    if not _entropy_available():
+        return jsonify({"error": "Entropy API requires USC with entropy schema"}), 503
+    try:
+        body = request.get_json(silent=True) or {}
+        node_id = (body.get("node_id") or "").strip()
+        if not node_id:
+            return jsonify({"error": "node_id required"}), 400
+        orch = get_entropy_orchestrator()
+        orch.mark_mezzed(node_id)
+        return jsonify({"ok": True, "node_id": node_id}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/entropy/orchestrator/fit", methods=["POST"])
+def entropy_orchestrator_fit():
+    if not _entropy_available():
+        return jsonify({"error": "Entropy API requires USC with entropy schema"}), 503
+    try:
+        orch = get_entropy_orchestrator()
+        ring = orch.fit_ring(tenant_id=request.args.get("tenant_id"))
+        return jsonify({"ring_order": ring}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+CREDITS_PER_ROUND_PER_NODE = 10
+
+
+@app.route("/api/entropy/orchestrator/run-round", methods=["POST"])
+def entropy_orchestrator_run_round():
+    if not _entropy_available():
+        return jsonify({"error": "Entropy API requires USC with entropy schema"}), 503
+    try:
+        orch = get_entropy_orchestrator()
+        tenant_filter = request.args.get("tenant_id")
+        active = orch.registry.list_active(tenant_id=tenant_filter)
+        tenant_counts: dict[str, int] = {}
+        for r in active:
+            t = (r.get("tenant_id") or "default").strip()
+            tenant_counts[t] = tenant_counts.get(t, 0) + 1
+        summary = orch.run_round(tenant_id=tenant_filter or "default", try_warehouse=True)
+        ledger = get_credit_ledger()
+        for t, count in tenant_counts.items():
+            if count > 0:
+                ledger.earn(t, count * CREDITS_PER_ROUND_PER_NODE)
+        return jsonify({"ok": True, "summary": summary, "credits_awarded": tenant_counts}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/entropy/random", methods=["GET", "POST"])
+def entropy_random():
+    if not _entropy_available():
+        return jsonify({"error": "Entropy API requires USC with entropy schema"}), 503
+    try:
+        if request.method == "POST":
+            body = request.get_json(silent=True) or {}
+            tenant_id = (body.get("tenant_id") or get_tenant_from_request() or "default").strip()
+            size_bytes = int(body.get("bytes", 32))
+        else:
+            tenant_id = (request.args.get("tenant") or get_tenant_from_request() or "default").strip()
+            size_bytes = min(int(request.args.get("bytes", 32)), 256)
+        ledger = get_credit_ledger()
+        cost = ledger.cost_for_random(size_bytes)
+        if not ledger.spend(tenant_id, cost):
+            return jsonify({"error": "Insufficient credits", "balance": ledger.get_credits(tenant_id)["balance"]}), 402
+        orch = get_entropy_orchestrator()
+        center = orch.center.get_authoritative_center()
+        rnd = (center + secrets.token_bytes(max(0, size_bytes - len(center))))[:size_bytes]
+        creds = ledger.get_credits(tenant_id)
+        return jsonify({
+            "random": rnd.hex(),
+            "credits_spent": cost,
+            "credits_balance": creds["balance"],
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/entropy/credits", methods=["GET"])
+def entropy_credits():
+    if not _entropy_available():
+        return jsonify({"error": "Entropy API requires USC with entropy schema"}), 503
+    try:
+        tenant_id = (request.args.get("tenant") or get_tenant_from_request() or "default").strip()
+        ledger = get_credit_ledger()
+        creds = ledger.get_credits(tenant_id)
+        return jsonify(creds), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

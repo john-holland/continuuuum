@@ -19,6 +19,8 @@ pip install -e ../unified-semantic-compressor
 pip install -r requirements.txt
 ```
 
+**Conda:** For multiple Python versions (e.g. continuum + USC with torch), see [docs/CONDA_BUILD_MANAGEMENT.md](docs/CONDA_BUILD_MANAGEMENT.md). Use `conda env create -f conda-environment.yml` then `pip install -e /path/to/unified-semantic-compressor`.
+
 If the compressor is elsewhere, install it and ensure `unified_semantic_archiver` is on your Python path, then `pip install -r requirements.txt`. See [DEPENDENCIES.md](DEPENDENCIES.md) for version expectations.
 
 ## Run
@@ -51,12 +53,35 @@ python -m unified_semantic_archiver init --db ./continuum.db
 
 From the continuum repo root, run: `pytest tests/` (requires `pip install pytest`). Smoke tests cover search (200) and upload-then-fetch.
 
+## Entropy API (Entropythief Ring)
+
+When USC is installed with the entropy schema, the server exposes an entropy ring API for randomness and credit accounting:
+
+- `POST /api/entropy/nodes/register` — Register a petal node
+- `GET /api/entropy/center` — Authoritative center guess
+- `POST /api/entropy/guess` — Submit guess from petal
+- `GET /api/entropy/ring` — Ring topology
+- `GET /api/entropy/nodes` — Active + warehouse nodes
+- `POST /api/entropy/orchestrator/fit` — Fit ring
+- `POST /api/entropy/orchestrator/run-round` — Run round, award credits
+- `GET /api/entropy/random` — Request random bytes (spend credits)
+- `GET /api/entropy/credits` — Credit balance
+
+Run a petal node:
+
+```bash
+python -m entropy.entropythief_node --continuum-url http://localhost:5050 --probe-target 8.8.8.8:53
+```
+
+See [docs/ENTROPYTHIEF_RING_ARCHITECTURE.md](docs/ENTROPYTHIEF_RING_ARCHITECTURE.md) for topology and coinstroids integration.
+
 ## Policy and Compliance
 
 - Terms draft: [TERMS_OF_SERVICE.md](TERMS_OF_SERVICE.md)
 - Security posture: [SECURITY.md](SECURITY.md)
 - Entropy claims/evidence policy: [docs/ENTROPY_CLAIMS_AND_EVIDENCE_POLICY.md](docs/ENTROPY_CLAIMS_AND_EVIDENCE_POLICY.md)
 - Practical compliance checklist: [docs/LEGAL_COMPLIANCE_CHECKLIST.md](docs/LEGAL_COMPLIANCE_CHECKLIST.md)
+- Entropy proof appendix: [docs/ENTROPY_LOWER_BOUND_PROOF.md](docs/ENTROPY_LOWER_BOUND_PROOF.md)
 
 ## Media Parity (USC + Continuum)
 

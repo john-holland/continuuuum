@@ -1,0 +1,53 @@
+version: 2.1
+
+jobs:
+{{#each jobs}}
+  {{id}}:
+    docker:
+      - image: cimg/python:{{../project.pythonVersion}}
+    steps:
+      - checkout
+      - run:
+          name: Run {{displayName}}
+          command: |
+{{#each steps}}
+            {{this}}
+{{/each}}
+
+{{/each}}
+  semantic_variant_tests:
+    parameters:
+      synonym_limit:
+        type: integer
+      prompt_expression:
+        type: string
+    docker:
+      - image: cimg/python:{{project.pythonVersion}}
+    steps:
+      - checkout
+      - run:
+          name: Run semantic variant case
+          command: |
+            python -m pip install --upgrade pip
+            pip install -r requirements.txt
+            export SYNONYM_MULTIPART_LIMIT="<< parameters.synonym_limit >>"
+            export PROMPT_VERSION_EXPRESSION="<< parameters.prompt_expression >>"
+            {{semanticVariants.testCommandTemplate}}
+
+workflows:
+  ci:
+    jobs:
+{{#each jobs}}
+      - {{id}}
+{{/each}}
+      - semantic_variant_tests:
+          matrix:
+            parameters:
+              synonym_limit:
+{{#each semanticVariants.synonymMultipartLimits}}
+                - {{this}}
+{{/each}}
+              prompt_expression:
+{{#each semanticVariants.promptVersionExpressions}}
+                - "{{this}}"
+{{/each}}

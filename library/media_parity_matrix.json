@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "source": "video_storage_tool",
+  "features": [
+    {
+      "id": "store-upload",
+      "category": "store",
+      "feature": "Store upload endpoint (media ingest)",
+      "current_behavior": "POST /api/store accepts video/image and starts background store job",
+      "usc_owner": "UscMediaService.store",
+      "continuum_owner": "POST /api/media/store",
+      "target_api": "/api/media/store",
+      "status": "Parity-tested"
+    },
+    {
+      "id": "store-list-status-retry",
+      "category": "store",
+      "feature": "Stored list, status, retry semantics",
+      "current_behavior": "GET /api/stored, GET /api/stored/{id}/status, POST /api/stored/{id}/retry",
+      "usc_owner": "UscMediaService.list_jobs/get_job_status/retry_store",
+      "continuum_owner": "GET/POST /api/media/stored/*",
+      "target_api": "/api/media/stored",
+      "status": "Parity-tested"
+    },
+    {
+      "id": "reconstruct-resultant-and-original",
+      "category": "reconstruct",
+      "feature": "Reconstitute resultant and original/diff modes",
+      "current_behavior": "POST /api/reconstitute original=false|true",
+      "usc_owner": "UscMediaService.reconstitute(use_original)",
+      "continuum_owner": "POST /api/media/reconstitute",
+      "target_api": "/api/media/reconstitute",
+      "status": "Parity-tested"
+    },
+    {
+      "id": "diff-compute-apply-lossless-lossy",
+      "category": "diff",
+      "feature": "Diff compute/apply with lossless and lossy policies",
+      "current_behavior": "compute_diff + reconstitute(use_diff=True) with ffv1/theora selection",
+      "usc_owner": "video_storage_tool.diff + UscMediaService.reconstitute",
+      "continuum_owner": "Exposed via reconstitute/stream endpoints",
+      "target_api": "/api/media/reconstitute + /api/media/stream/*",
+      "status": "Parity-tested"
+    },
+    {
+      "id": "loss-coefficient-policy",
+      "category": "quality",
+      "feature": "Loss coefficient policy and thresholds",
+      "current_behavior": "store.loss_coefficient influences audio/diff codecs and parity assertions",
+      "usc_owner": "UscMediaService.get_settings/update_settings + run_store config",
+      "continuum_owner": "GET/PUT /api/media/settings",
+      "target_api": "store.loss_coefficient",
+      "status": "Parity-tested"
+    },
+    {
+      "id": "image-video-input-parity",
+      "category": "formats",
+      "feature": "Image and video input handling",
+      "current_behavior": "png/jpg/jpeg/webp converted to input.mp4, manifest tracks source image format",
+      "usc_owner": "UscMediaService.store + video_storage_tool image conversion",
+      "continuum_owner": "POST /api/media/store",
+      "target_api": "/api/media/store",
+      "status": "Parity-tested"
+    },
+    {
+      "id": "stream-range-info",
+      "category": "stream",
+      "feature": "Byte-range stream endpoint + stream info metadata",
+      "current_behavior": "GET /stream/{id} Range + GET /api/stream/{id}/info",
+      "usc_owner": "UscMediaService.stream_info/open_stream",
+      "continuum_owner": "GET /api/media/stream/{id} and /api/media/stream/{id}/info",
+      "target_api": "/api/media/stream/{id}",
+      "status": "Parity-tested"
+    },
+    {
+      "id": "stream-cache-mode-budget-eviction",
+      "category": "stream-cache",
+      "feature": "Cached-stream mode with budget and eviction policy exposure",
+      "current_behavior": "stream_cache enabled + budget_gb controls LRU cache",
+      "usc_owner": "UscMediaService._get_stream_cache",
+      "continuum_owner": "GET/PUT /api/media/settings",
+      "target_api": "stream_cache.enabled/budget_gb/directory",
+      "status": "Parity-tested"
+    },
+    {
+      "id": "settings-api-merge",
+      "category": "settings",
+      "feature": "Recursive settings merge semantics",
+      "current_behavior": "GET/PUT /api/settings merges JSON overrides into config",
+      "usc_owner": "UscMediaService.get_settings/update_settings",
+      "continuum_owner": "GET/PUT /api/media/settings",
+      "target_api": "/api/media/settings",
+      "status": "Parity-tested"
+    },
+    {
+      "id": "t2v-model-download-surface",
+      "category": "settings",
+      "feature": "T2V model download trigger + status",
+      "current_behavior": "POST /api/t2v/download + GET /api/t2v/download/status",
+      "usc_owner": "UscMediaService.start_t2v_download/get_t2v_download_status",
+      "continuum_owner": "POST/GET /api/media/t2v/download*",
+      "target_api": "/api/media/t2v/download",
+      "status": "Parity-tested"
+    },
+    {
+      "id": "tests-bitexact",
+      "category": "tests",
+      "feature": "Bit-exact for lossless and threshold-based for lossy roundtrip",
+      "current_behavior": "assert_roundtrip_quality with framemd5/hash or PSNR/SSIM",
+      "usc_owner": "USC media service parity tests",
+      "continuum_owner": "Continuum endpoint parity tests",
+      "target_api": "tests",
+      "status": "Parity-tested"
+    }
+  ]
+}

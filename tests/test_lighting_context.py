@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from lighting_context import LightingContextService, WeatherSnapshot, WeatherAdapter
+import datetime as dt
+
+from lighting_context import (
+    LightingContextService,
+    ShadowGeometrySolver,
+    SunPlaneSurfaceAnalyzer,
+    SunPositionCalculator,
+    WeatherAdapter,
+    WeatherSnapshot,
+)
 
 
 class _StubWeather(WeatherAdapter):
@@ -119,3 +128,53 @@ def test_rollout_flags_can_disable_lunar_context():
     assert result["moon_azimuth_deg"] is None
     assert result["moon_elevation_deg"] is None
     assert result["lighting_rollout_flags"]["enable_lunar_context"] is False
+
+
+def test_shadow_geometry_solver_shadow_direction_for_time():
+    solver = ShadowGeometrySolver()
+    when = dt.datetime(2026, 7, 3, 12, 0, 0, tzinfo=dt.timezone.utc)
+    shadow_az = solver.shadow_direction_for_time(lat_deg=40.0, lon_deg=-74.0, when_utc=when)
+    sun = SunPositionCalculator.compute(lat_deg=40.0, lon_deg=-74.0, when_utc=when)
+    expected_shadow = (float(sun["sun_azimuth_deg"]) + 180.0) % 360.0
+    assert abs((shadow_az - expected_shadow) % 360.0) < 1.0
+
+
+def test_shadow_geometry_solver_estimate_time_from_shadow():
+    solver = ShadowGeometrySolver()
+    when_noon = dt.datetime(2026, 7, 3, 12, 0, 0, tzinfo=dt.timezone.utc)
+    sun = SunPositionCalculator.compute(lat_deg=40.0, lon_deg=-74.0, when_utc=when_noon)
+    shadow_az = (float(sun["sun_azimuth_deg"]) + 180.0) % 360.0
+    est = solver.estimate_time_from_shadow_direction(
+        lat_deg=40.0,
+        lon_deg=-74.0,
+        date_utc=when_noon,
+        shadow_azimuth_world_deg=shadow_az,
+        tolerance_deg=30.0,
+    )
+    assert est is not None
+    assert abs((est - when_noon).total_seconds()) < 3600.0
+
+
+def test_analyzer_infer_with_lat_lon_when_uses_sun_position():
+    analyzer = SunPlaneSurfaceAnalyzer()
+    meta = {
+        "asset_location": {"lat": 40.0, "lon": -74.0},
+        "capture_datetime_utc": "2026-07-03T14:00:00Z",
+    }
+    direction, conf, reasons, extras = analyzer.infer(meta)
+    assert direction is not None
+    assert "sun_position_from_datetime" in reasons
+    assert extras.get("daytime_lit") is True
+
+
+def test_compute_includes_daytime_lit_and_rollout_flags():
+    svc = LightingContextService(weather_adapters={"stub-weather": _StubWeather()}, default_weather_adapter="stub-weather")
+    result = svc.compute(
+        lat=47.62,
+        lon=-122.35,
+        metadata={"capture_datetime_utc": "2026-07-03T12:00:00Z"},
+    )
+    assert "daytime_lit" in result
+    assert isinstance(result["daytime_lit"], bool)
+    assert "enable_shadow_time_inference" in result["lighting_rollout_flags"]
+    assert "enable_image_edge_analysis" in result["lighting_rollout_flags"]

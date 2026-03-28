@@ -79,3 +79,16 @@ Terms and contract gates must state:
 - Probe measurements are always live in integration verification mode.
 - Cached probe outputs are not valid for legal/compliance gate checks.
 - Evidence artifacts must include generation timestamp and software version identity.
+
+## Ring Overlap and Daisy Topology
+
+The entropy ring uses a daisy-shaped topology with a center hub and petal compute nodes. Ring-overlap aggregation (center target, sequential pass-along, entropy-from-yesterday) provides additional entropy beyond single-probe measurements. See:
+
+- `docs/ENTROPYTHIEF_RING_ARCHITECTURE.md` — topology and component overview
+- `docs/ENTROPY_LOWER_BOUND_PROOF.md` — mathematical appendix (Lemmas 1–4 on ring residual, innovation, and entropy gain)
+
+## Mathematical Appendix Reference
+
+For a formal lower-bound proof sketch and dependency-tree framing of entropy gain assumptions, see:
+
+- `docs/ENTROPY_LOWER_BOUND_PROOF.md`

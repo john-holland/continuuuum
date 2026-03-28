@@ -1,0 +1,46 @@
+name: {{github.workflowName}}
+
+on:
+  workflow_dispatch:
+
+jobs:
+{{#each jobs}}
+  {{id}}:
+    name: {{displayName}}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "{{../project.pythonVersion}}"
+      - name: Run {{displayName}}
+        shell: bash
+        run: |
+{{#each steps}}
+          {{this}}
+{{/each}}
+
+{{/each}}
+{{#each semanticVariantMatrix}}
+  semantic_variant_{{@index}}:
+    name: Semantic Variant {{@index}}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "{{../project.pythonVersion}}"
+      - name: Run semantic variant case
+        shell: bash
+        env:
+          SYNONYM_MULTIPART_LIMIT: "{{synonymLimit}}"
+          PROMPT_VERSION_EXPRESSION: "{{promptExpression}}"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          {{../semanticVariants.testCommandTemplate}}
+{{/each}}

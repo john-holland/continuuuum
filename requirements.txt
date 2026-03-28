@@ -1,7 +1,14 @@
 # Continuum library server
 flask>=3.0.0
 
+# Optional: for image edge analysis (shadow direction detection)
+Pillow>=10.0.0
+numpy>=1.24.0
+
 # Required: unified_semantic_archiver (USC). Not on PyPI; install from source first, then this file:
 #   pip install -e /path/to/unified-semantic-compressor
 #   pip install -r requirements.txt
 # See README and DEPENDENCIES.md for version expectations.
+
+# Tests
+pytest>=7.0.0
