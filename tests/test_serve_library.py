@@ -98,6 +98,14 @@ def test_search_returns_200():
     assert isinstance(data, list)
 
 
+def test_continuum_editor_webgl_redirect():
+    with app.test_client() as client:
+        r = client.get("/continuum_editor/", follow_redirects=False)
+    assert r.status_code in (301, 302, 303, 307, 308)
+    loc = r.headers.get("Location", "")
+    assert "/library/continuum_editor_webgl/index.html" in loc
+
+
 def test_upload_then_fetch():
     with app.test_client() as client:
         # Upload a minimal document (no file)

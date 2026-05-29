@@ -2,6 +2,66 @@
 
 Continuum library server: upload, search, and view documents with location and type-specific metadata. Uses **USC** (unified-semantic-compressor; Python package name `unified_semantic_archiver`) for the continuum DB and schema.
 
+## Repository map
+
+Sibling repos (assumed layout under `C:/Users/John/`):
+
+| Repo | Role | README |
+|------|------|--------|
+| **Drawer 2** | Unity game systems, System Drawer, narrative/4D/pathfinding | [../Drawer 2/README.md](../Drawer%202/README.md) |
+| **continuum** (this repo) | Library web UI + Flask API (upload, search, media parity) | [README.md](README.md) |
+| **unified-semantic-compressor** | USC core: DB schema, compressors, ETL, CLI | [../unified-semantic-compressor/README.md](../unified-semantic-compressor/README.md) |
+
+Unity ↔ Python bridge: [../Drawer 2/Scripts/CONTINUUM_AND_COMPRESSOR.md](../Drawer%202/Scripts/CONTINUUM_AND_COMPRESSOR.md)
+
+## Services
+
+| Service | Entry point | Purpose |
+|---------|-------------|---------|
+| **Library server** | `python serve_library.py` | Web UI + `/api/library/*` upload, search, map |
+| **Entropy ring API** | Same server (when USC entropy schema enabled) | Randomness and credit accounting — see [Entropy API](#entropy-api-entropythief-ring) |
+| **Media parity API** | Same server | Store, reconstitute, stream, T2V — see [Media Parity](#media-parity-usc--continuum) |
+
+Depends on **USC** (`unified_semantic_archiver`) for DB schema, compressors, and media primitives.
+
+## Documentation index
+
+When adding a new `.md` in this repo, append it here.
+
+### Root policy
+
+- [SECURITY.md](SECURITY.md) — Security posture and API key usage
+- [TERMS_OF_SERVICE.md](TERMS_OF_SERVICE.md) — Terms draft
+- [TENANT.md](TENANT.md) — Tenant scoping
+- [DEPENDENCIES.md](DEPENDENCIES.md) — Version expectations
+
+### Architecture / compliance
+
+- [docs/ENTROPYTHIEF_RING_ARCHITECTURE.md](docs/ENTROPYTHIEF_RING_ARCHITECTURE.md) — Entropythief ring topology
+- [docs/ENTROPY_CLAIMS_AND_EVIDENCE_POLICY.md](docs/ENTROPY_CLAIMS_AND_EVIDENCE_POLICY.md) — Entropy claims and evidence policy
+- [docs/ENTROPY_LOWER_BOUND_PROOF.md](docs/ENTROPY_LOWER_BOUND_PROOF.md) — Entropy proof appendix
+- [docs/LEGAL_COMPLIANCE_CHECKLIST.md](docs/LEGAL_COMPLIANCE_CHECKLIST.md) — Practical compliance checklist
+
+### Media / USC contract
+
+- [docs/USC_CONTINUUM_MEDIA_INTERFACE_CONTRACT.md](docs/USC_CONTINUUM_MEDIA_INTERFACE_CONTRACT.md) — Media interface contract
+- [docs/VIDEO_STORAGE_TOOL_RETIREMENT_CHECKLIST.md](docs/VIDEO_STORAGE_TOOL_RETIREMENT_CHECKLIST.md) — video_storage_tool retirement checklist
+
+### Dev / CI
+
+- [docs/CONDA_BUILD_MANAGEMENT.md](docs/CONDA_BUILD_MANAGEMENT.md) — Conda environments
+- [docs/CI_GENERATOR.md](docs/CI_GENERATOR.md) — CI generator
+
+### WebGL editor stub
+
+- [library/continuum_editor_webgl/README.md](library/continuum_editor_webgl/README.md) — WebGL editor stub
+
+### Sibling repositories
+
+- [Drawer 2 documentation index](../Drawer%202/README.md#documentation-index)
+- [Unity ↔ Python bridge](../Drawer%202/Scripts/CONTINUUM_AND_COMPRESSOR.md)
+- [unified-semantic-compressor documentation index](../unified-semantic-compressor/README.md#documentation-index)
+
 ## Getting started (full stack)
 
 1. **Install USC** (unified-semantic-compressor): `pip install -e /path/to/unified-semantic-compressor`
@@ -77,19 +137,11 @@ See [docs/ENTROPYTHIEF_RING_ARCHITECTURE.md](docs/ENTROPYTHIEF_RING_ARCHITECTURE
 
 ## Policy and Compliance
 
-- Terms draft: [TERMS_OF_SERVICE.md](TERMS_OF_SERVICE.md)
-- Security posture: [SECURITY.md](SECURITY.md)
-- Entropy claims/evidence policy: [docs/ENTROPY_CLAIMS_AND_EVIDENCE_POLICY.md](docs/ENTROPY_CLAIMS_AND_EVIDENCE_POLICY.md)
-- Practical compliance checklist: [docs/LEGAL_COMPLIANCE_CHECKLIST.md](docs/LEGAL_COMPLIANCE_CHECKLIST.md)
-- Entropy proof appendix: [docs/ENTROPY_LOWER_BOUND_PROOF.md](docs/ENTROPY_LOWER_BOUND_PROOF.md)
+See [Documentation index](#documentation-index) for policy, security, entropy, and compliance docs.
 
 ## Media Parity (USC + Continuum)
 
-To retire `video_storage_tool`, Continuum tracks feature parity in:
-
-- `library/media_parity_matrix.json`
-- `docs/USC_CONTINUUM_MEDIA_INTERFACE_CONTRACT.md`
-- `docs/VIDEO_STORAGE_TOOL_RETIREMENT_CHECKLIST.md`
+To retire `video_storage_tool`, Continuum tracks feature parity in `library/media_parity_matrix.json`. Contract and retirement docs are in the [Documentation index](#documentation-index) under **Media / USC contract**.
 
 Run parity matrix checks with:
 

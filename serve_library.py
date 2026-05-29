@@ -478,6 +478,12 @@ def index():
     return "Library UI not found (missing library/library.html)", 404
 
 
+@app.route("/continuum_editor/")
+def continuum_editor_webgl_entry():
+    """Shortcut to the Unity WebGL Continuum Library UI under static library/."""
+    return redirect("/library/continuum_editor_webgl/index.html")
+
+
 @app.route("/api/library/search")
 def search():
     try:
