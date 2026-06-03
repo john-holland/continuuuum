@@ -21,6 +21,7 @@ Unity ↔ Python bridge: [../Drawer 2/Scripts/CONTINUUM_AND_COMPRESSOR.md](../Dr
 | **Library server** | `python serve_library.py` | Web UI + `/api/library/*` upload, search, map |
 | **Entropy ring API** | Same server (when USC entropy schema enabled) | Randomness and credit accounting — see [Entropy API](#entropy-api-entropythief-ring) |
 | **Media parity API** | Same server | Store, reconstitute, stream, T2V — see [Media Parity](#media-parity-usc--continuum) |
+| **Planet tiles API** | Same server | `GET/POST /api/planet/tiles`, `GET /api/planet/gpx`, `POST /api/planet/google/shapes` |
 
 Depends on **USC** (`unified_semantic_archiver`) for DB schema, compressors, and media primitives.
 

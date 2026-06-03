@@ -1276,6 +1276,123 @@ def media_parity_matrix():
         return jsonify({"error": str(e)}), 500
 
 
+_PLANET_TILES_DIR = Path(os.environ.get("CONTINUUM_PLANET_TILES", "planet_tiles"))
+
+
+def _planet_tile_path(planet_id: str, face: int, lod: int, x: int, y: int) -> Path:
+    return _PLANET_TILES_DIR / planet_id / str(face) / str(lod) / f"{x}_{y}.bin"
+
+
+@app.route("/api/planet/tiles")
+def planet_tiles_get():
+    planet_id = request.args.get("planet_id", "default")
+    face = int(request.args.get("face", 0))
+    lod = int(request.args.get("lod", 0))
+    x = int(request.args.get("x", 0))
+    y = int(request.args.get("y", 0))
+    path = _planet_tile_path(planet_id, face, lod, x, y)
+    if not path.is_file():
+        return jsonify({"error": "tile not found"}), 404
+    return send_file(path, mimetype="application/octet-stream")
+
+
+@app.route("/api/planet/tiles", methods=["POST"])
+def planet_tiles_post():
+    planet_id = request.form.get("planet_id", "default")
+    face = int(request.form.get("face", 0))
+    lod = int(request.form.get("lod", 0))
+    x = int(request.form.get("x", 0))
+    y = int(request.form.get("y", 0))
+    blob = request.files.get("file")
+    if blob is None:
+        return jsonify({"error": "file required"}), 400
+    path = _planet_tile_path(planet_id, face, lod, x, y)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    blob.save(path)
+    return jsonify({"ok": True, "path": str(path)}), 201
+
+
+@app.route("/api/planet/gpx")
+def planet_gpx_get():
+    planet_id = request.args.get("planet_id", "default")
+    gpx_path = _PLANET_TILES_DIR / planet_id / "overlay.gpx"
+    if not gpx_path.is_file():
+        return jsonify({"error": "gpx not found"}), 404
+    return send_file(gpx_path, mimetype="application/gpx+xml")
+
+
+_PLANET_WEATHER_DIR = Path(os.environ.get("CONTINUUM_PLANET_WEATHER", "planet_weather"))
+
+
+def _planet_weather_path(planet_id: str, lat: str, lon: str) -> Path:
+    return _PLANET_WEATHER_DIR / planet_id / f"{lat}_{lon}.json"
+
+
+@app.route("/api/planet/weather_tiles")
+def planet_weather_tiles_get():
+    planet_id = request.args.get("planet_id", "default")
+    lat = request.args.get("lat", "0")
+    lon = request.args.get("lon", "0")
+    path = _planet_weather_path(planet_id, lat, lon)
+    if path.is_file():
+        return send_file(path, mimetype="application/json")
+    return jsonify({
+        "cloud_base_m": 1000.0,
+        "cloud_top_m": 3000.0,
+        "cloud_cover": 0.5,
+        "pressure_scale_height": 8500.0,
+        "altitude_band_mask": 4,
+    })
+
+
+@app.route("/api/planet/weather_tiles", methods=["POST"])
+def planet_weather_tiles_post():
+    planet_id = request.args.get("planet_id", request.form.get("planet_id", "default"))
+    lat = request.args.get("lat", request.form.get("lat", "0"))
+    lon = request.args.get("lon", request.form.get("lon", "0"))
+    payload = request.get_json(silent=True) or {}
+    path = _planet_weather_path(planet_id, lat, lon)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    return jsonify({"ok": True, "path": str(path)}), 201
+
+
+@app.route("/api/planet/composition", methods=["GET", "POST"])
+def planet_composition():
+    comp_dir = _PLANET_TILES_DIR / "composition"
+    planet_id = request.args.get("planet_id", request.form.get("planet_id", "default"))
+    path = comp_dir / f"{planet_id}.json"
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return jsonify({"ok": True}), 201
+    if not path.is_file():
+        return jsonify({"plates": [], "minerals": {}}), 200
+    return send_file(path, mimetype="application/json")
+
+
+@app.route("/api/planet/google/shapes", methods=["POST"])
+def planet_google_shapes():
+    api_key = os.environ.get("GOOGLE_MAPS_API_KEY", "").strip()
+    if not api_key:
+        return jsonify({"error": "GOOGLE_MAPS_API_KEY not configured"}), 503
+    payload = request.get_json(silent=True) or {}
+    lat = payload.get("lat")
+    lon = payload.get("lon")
+    radius_m = payload.get("radius_m", 1000)
+    if lat is None or lon is None:
+        return jsonify({"error": "lat and lon required"}), 400
+    # Proxy placeholder: clients may extend with Maps Platform endpoints.
+    return jsonify({
+        "ok": True,
+        "lat": lat,
+        "lon": lon,
+        "radius_m": radius_m,
+        "mask": "stub",
+    }), 200
+
+
 def main():
     port = int(os.environ.get("PORT", 5050))
     app.run(host="0.0.0.0", port=port, debug=os.environ.get("FLASK_DEBUG") == "1")
