@@ -30,6 +30,7 @@ SKIP_DIR_NAMES = {
     ".venv312",
     "Artifacts",
     "ArtifactDB",
+    "Temp",
 }
 
 SKIP_DIR_PREFIXES = (".venv",)
@@ -224,7 +225,7 @@ def main() -> int:
         nargs="*",
         default=[
             r"c:\Users\John\unified-semantic-compressor",
-            r"c:\Users\John\continuum",
+            r"c:\Users\John\continuuuum",
             r"c:\Users\John\Drawer 2",
             r"D:\Development\resaurce",
             r"D:\Development\log-view-machine",
