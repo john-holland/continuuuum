@@ -1,4 +1,4 @@
-# Continuum library server
+# Continuuuum library server
 flask>=3.0.0
 
 # Optional: for image edge analysis (shadow direction detection)

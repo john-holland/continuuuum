@@ -6,7 +6,7 @@ Daisy-shaped topology for entropy harvesting: center hub, petal compute nodes in
 
 ```mermaid
 flowchart TB
-  subgraph continuum [Continuum Server]
+  subgraph continuuuum [Continuuuum Server]
     CenterTarget[CenterObjectTarget]
     RingOrch[RingOrchestrator]
     NodeReg[NodeRegistry]
@@ -69,7 +69,7 @@ flowchart LR
 
 Coinstroids (john-holland/coinstroids) should:
 
-1. Instantiate CaveAdapter with continuum URL.
+1. Instantiate CaveAdapter with continuuuum URL.
 2. Call `start_node(...)` to run petals and earn credits.
 3. Call `request_random(tenant_id, size_bytes)` when the game needs randomness.
 4. Call `get_credits(tenant_id)` to show balance.

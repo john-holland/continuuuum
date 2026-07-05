@@ -1,7 +1,7 @@
-continuum.db
-library_uploads/
-__pycache__/
-*.py[cod]
-.env
-.venv/
-venv/
+continuuuum.db
+library_uploads/
+__pycache__/
+*.py[cod]
+.env
+.venv/
+venv/

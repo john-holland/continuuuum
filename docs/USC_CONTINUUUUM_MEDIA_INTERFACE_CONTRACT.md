@@ -1,6 +1,6 @@
-# USC + Continuum Media Interface Contract
+# USC + Continuuuum Media Interface Contract
 
-This contract defines how media features from `video_storage_tool` map to USC (core) and Continuum (service/API).
+This contract defines how media features from `video_storage_tool` map to USC (core) and Continuuuum (service/API).
 
 ## Ownership
 
@@ -12,7 +12,7 @@ This contract defines how media features from `video_storage_tool` map to USC (c
   - quality verification primitives
   - stream cache policy implementation
 
-- **Continuum owns service/API surface**
+- **Continuuuum owns service/API surface**
   - HTTP endpoints
   - tenant scoping and auth
   - stream transport and Range responses
@@ -35,7 +35,7 @@ class UscMediaService(Protocol):
     def get_t2v_download_status(self) -> dict: ...
 ```
 
-## Required Continuum endpoints
+## Required Continuuuum endpoints
 
 - `POST /api/media/store`
 - `GET /api/media/stored`
@@ -54,5 +54,5 @@ class UscMediaService(Protocol):
 A feature is complete only when all are true:
 
 1. USC primitive exists and is covered by unit/integration tests.
-2. Continuum endpoint exposes that primitive with tenant-aware behavior.
+2. Continuuuum endpoint exposes that primitive with tenant-aware behavior.
 3. Parity matrix status reaches `Parity-tested`.

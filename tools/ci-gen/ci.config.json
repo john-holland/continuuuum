@@ -1,11 +1,11 @@
 {
   "project": {
-    "name": "continuum",
+    "name": "continuuuum",
     "pythonVersion": "3.12",
     "nodeVersion": "20"
   },
   "github": {
-    "workflowName": "continuum-ci",
+    "workflowName": "continuuuum-ci",
     "workflowFile": ".github/workflows/ci.yml",
     "manualOnly": true
   },
@@ -47,7 +47,7 @@
         "python -m pip install --upgrade pip",
         "pip install -r requirements.txt",
         "python -m compileall .",
-        "python -m zipfile -c continuum_artifacts.zip README.md DEPENDENCIES.md requirements.txt"
+        "python -m zipfile -c continuuuum_artifacts.zip README.md DEPENDENCIES.md requirements.txt"
       ]
     },
     {

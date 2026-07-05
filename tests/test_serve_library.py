@@ -1,6 +1,6 @@
 """
-Smoke tests for continuum library API (search returns 200, upload then fetch).
-Run from continuum repo root: pytest tests/
+Smoke tests for continuuuum library API (search returns 200, upload then fetch).
+Run from continuuuum repo root: pytest tests/
 """
 import os
 import sys
@@ -15,8 +15,8 @@ if str(_repo_root) not in sys.path:
 # Use a temp DB so we don't touch a real DB; set before importing serve_library
 _tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _tmp.close()
-os.environ["CONTINUUM_DB_PATH"] = _tmp.name
-os.environ.pop("CONTINUUM_API_KEY", None)
+os.environ["CONTINUUUUM_DB_PATH"] = _tmp.name
+os.environ.pop("CONTINUUUUM_API_KEY", None)
 
 from serve_library import app  # noqa: E402
 
@@ -98,12 +98,12 @@ def test_search_returns_200():
     assert isinstance(data, list)
 
 
-def test_continuum_editor_webgl_redirect():
+def test_continuuuum_editor_webgl_redirect():
     with app.test_client() as client:
-        r = client.get("/continuum_editor/", follow_redirects=False)
+        r = client.get("/continuuuum_editor/", follow_redirects=False)
     assert r.status_code in (301, 302, 303, 307, 308)
     loc = r.headers.get("Location", "")
-    assert "/library/continuum_editor_webgl/index.html" in loc
+    assert "/library/continuuuum_editor_webgl/index.html" in loc
 
 
 def test_upload_then_fetch():

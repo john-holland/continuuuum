@@ -1,6 +1,6 @@
 """
-Continuum Library HTTP server (SPA + API).
-Uses unified_semantic_archiver (unified-semantic-compressor package) for ContinuumDb.
+Continuuuum Library HTTP server (SPA + API).
+Uses unified_semantic_archiver (unified-semantic-compressor package) for ContinuuuumDb.
 Run: pip install -e ../unified-semantic-compressor && python serve_library.py
 """
 from __future__ import annotations
@@ -24,12 +24,12 @@ from spatial_routes import register_spatial_routes
 logger = logging.getLogger(__name__)
 
 try:
-    from unified_semantic_archiver.db import ContinuumDb
+    from unified_semantic_archiver.db import ContinuuuumDb
 except ImportError:
-    class ContinuumDb:  # type: ignore[override]
+    class ContinuuuumDb:  # type: ignore[override]
         """
         Lightweight fallback DB used when USC is unavailable.
-        Intended for local development/tests of Continuum service surface only.
+        Intended for local development/tests of Continuuuum service surface only.
         """
 
         def __init__(self, _path: str):
@@ -104,30 +104,30 @@ except ImportError:
 _here = Path(__file__).resolve().parent
 app = Flask(__name__, static_folder=str(_here / "library"), static_url_path="")
 LIBRARY_HTML = _here / "library" / "library.html"
-WEBGL_EDITOR_INDEX = _here / "library" / "continuum_editor_webgl" / "index.html"
+WEBGL_EDITOR_INDEX = _here / "library" / "continuuuum_editor_webgl" / "index.html"
 SHARED_STATIC = Path(
     os.environ.get(
-        "CONTINUUM_SHARED_STATIC",
-        str(_here.parent / "Drawer 2" / "Scripts" / "continuum_api" / "static" / "shared"),
+        "CONTINUUUUM_SHARED_STATIC",
+        str(_here.parent / "Drawer 2" / "Scripts" / "continuuuum_api" / "static" / "shared"),
     )
 )
 
-DB_PATH = os.environ.get("CONTINUUM_DB_PATH") or str(_here / "continuum.db")
+DB_PATH = os.environ.get("CONTINUUUUM_DB_PATH") or str(_here / "continuuuum.db")
 register_spatial_routes(app, lambda: DB_PATH)
-UPLOADS_DIR = Path(os.environ.get("CONTINUUM_LIBRARY_UPLOADS") or str(_here / "library_uploads"))
+UPLOADS_DIR = Path(os.environ.get("CONTINUUUUM_LIBRARY_UPLOADS") or str(_here / "library_uploads"))
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
-_db: ContinuumDb | None = None
+_db: ContinuuuumDb | None = None
 _media_service = None
 _lighting_context_service: LightingContextService | None = None
 _orchestrator = None
 _credit_ledger = None
 
-# Per-tenant API keys: env CONTINUUM_TENANT_KEYS='{"tenant1":"key1"}' and/or file CONTINUUM_TENANT_KEYS_FILE.
-# Global CONTINUUM_API_KEY is used when the request tenant has no per-tenant key (backward compatible).
-_API_KEY = (os.environ.get("CONTINUUM_API_KEY") or "").strip()
+# Per-tenant API keys: env CONTINUUUUM_TENANT_KEYS='{"tenant1":"key1"}' and/or file CONTINUUUUM_TENANT_KEYS_FILE.
+# Global CONTINUUUUM_API_KEY is used when the request tenant has no per-tenant key (backward compatible).
+_API_KEY = (os.environ.get("CONTINUUUUM_API_KEY") or "").strip()
 _TENANT_KEYS: dict[str, str] = {}
-_TENANT_KEYS_FILE = (os.environ.get("CONTINUUM_TENANT_KEYS_FILE") or "").strip()
+_TENANT_KEYS_FILE = (os.environ.get("CONTINUUUUM_TENANT_KEYS_FILE") or "").strip()
 
 
 ENTROPY_EXTERNAL_PROBES: tuple[tuple[str, str, int], ...] = (
@@ -139,7 +139,7 @@ ENTROPY_EXTERNAL_PROBES: tuple[tuple[str, str, int], ...] = (
 
 def _load_tenant_keys() -> dict[str, str]:
     out: dict[str, str] = {}
-    env_json = (os.environ.get("CONTINUUM_TENANT_KEYS") or "").strip()
+    env_json = (os.environ.get("CONTINUUUUM_TENANT_KEYS") or "").strip()
     if env_json:
         try:
             out.update(json.loads(env_json))
@@ -165,15 +165,15 @@ def _save_tenant_keys(keys: dict[str, str]) -> None:
 
 def _get_tenant_keys() -> dict[str, str]:
     global _TENANT_KEYS
-    if not _TENANT_KEYS and (_API_KEY or os.environ.get("CONTINUUM_TENANT_KEYS") or _TENANT_KEYS_FILE):
+    if not _TENANT_KEYS and (_API_KEY or os.environ.get("CONTINUUUUM_TENANT_KEYS") or _TENANT_KEYS_FILE):
         _TENANT_KEYS = _load_tenant_keys()
     return _TENANT_KEYS
 
 
-def get_db() -> ContinuumDb:
+def get_db() -> ContinuuuumDb:
     global _db
     if _db is None:
-        _db = ContinuumDb(DB_PATH)
+        _db = ContinuuuumDb(DB_PATH)
     return _db
 
 
@@ -185,9 +185,9 @@ def get_media_service():
                 "USC media service is unavailable. Install unified-semantic-compressor with media support."
             )
         _media_service = UscMediaService(
-            storage_root=Path(os.environ.get("CONTINUUM_MEDIA_STORAGE") or (_here / "media_storage")),
-            config_path=Path(os.environ.get("CONTINUUM_MEDIA_CONFIG_PATH") or (_here / "media_config.yaml")),
-            settings_path=Path(os.environ.get("CONTINUUM_MEDIA_SETTINGS_PATH") or (_here / "media_settings.json")),
+            storage_root=Path(os.environ.get("CONTINUUUUM_MEDIA_STORAGE") or (_here / "media_storage")),
+            config_path=Path(os.environ.get("CONTINUUUUM_MEDIA_CONFIG_PATH") or (_here / "media_config.yaml")),
+            settings_path=Path(os.environ.get("CONTINUUUUM_MEDIA_SETTINGS_PATH") or (_here / "media_settings.json")),
         )
     return _media_service
 
@@ -497,11 +497,11 @@ def index():
     return "Library UI not found (missing library/library.html)", 404
 
 
-@app.route("/continuum_editor/")
-def continuum_editor_webgl_entry():
-    """Shortcut to the Unity WebGL Continuum Library UI, or file upload when WebGL is not built."""
+@app.route("/continuuuum_editor/")
+def continuuuum_editor_webgl_entry():
+    """Shortcut to the Unity WebGL Continuuuum Library UI, or file upload when WebGL is not built."""
     if WEBGL_EDITOR_INDEX.is_file():
-        return redirect("/library/continuum_editor_webgl/index.html")
+        return redirect("/library/continuuuum_editor_webgl/index.html")
     params = request.args.to_dict(flat=True)
     params["panel"] = "upload"
     return redirect("/library?" + urllib.parse.urlencode(params))
@@ -800,7 +800,7 @@ def geocode():
         return jsonify({"error": "address query required"}), 400
     try:
         url = "https://nominatim.openstreetmap.org/search?q=" + urllib.parse.quote(address) + "&format=json&limit=1"
-        req = urllib.request.Request(url, headers={"User-Agent": "ContinuumLibrary/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "ContinuuuumLibrary/1.0"})
         with urllib.request.urlopen(req) as r:
             data = json.loads(r.read().decode())
         if not data:
@@ -1002,13 +1002,13 @@ def media_t2v_download_status():
         return jsonify({"error": str(e)}), 500
 
 
-_ADMIN_KEY = (os.environ.get("CONTINUUM_ADMIN_KEY") or "").strip()
+_ADMIN_KEY = (os.environ.get("CONTINUUUUM_ADMIN_KEY") or "").strip()
 _MEDIA_PARITY_MATRIX = _here / "library" / "media_parity_matrix.json"
 
 
 @app.route("/api/admin/tenant-keys", methods=["POST"])
 def admin_tenant_keys():
-    """Generate a new API key for a tenant. Requires X-Admin-Key or Authorization: Bearer <CONTINUUM_ADMIN_KEY>."""
+    """Generate a new API key for a tenant. Requires X-Admin-Key or Authorization: Bearer <CONTINUUUUM_ADMIN_KEY>."""
     if _ADMIN_KEY:
         auth = request.headers.get("X-Admin-Key") or request.headers.get("Authorization") or ""
         if auth.startswith("Bearer "):
@@ -1313,7 +1313,7 @@ def entropy_credits():
 @app.route("/api/admin/media-parity", methods=["GET"])
 def media_parity_matrix():
     """
-    Return USC+Continuum media parity matrix sourced from video_storage_tool inventory.
+    Return USC+Continuuuum media parity matrix sourced from video_storage_tool inventory.
     This is an admin tracking endpoint for feature-complete retirement work.
     """
     if not _MEDIA_PARITY_MATRIX.is_file():
@@ -1326,7 +1326,7 @@ def media_parity_matrix():
         return jsonify({"error": str(e)}), 500
 
 
-_PLANET_TILES_DIR = Path(os.environ.get("CONTINUUM_PLANET_TILES", "planet_tiles"))
+_PLANET_TILES_DIR = Path(os.environ.get("CONTINUUUUM_PLANET_TILES", "planet_tiles"))
 
 
 def _planet_tile_path(planet_id: str, face: int, lod: int, x: int, y: int) -> Path:
@@ -1371,7 +1371,7 @@ def planet_gpx_get():
     return send_file(gpx_path, mimetype="application/gpx+xml")
 
 
-_PLANET_WEATHER_DIR = Path(os.environ.get("CONTINUUM_PLANET_WEATHER", "planet_weather"))
+_PLANET_WEATHER_DIR = Path(os.environ.get("CONTINUUUUM_PLANET_WEATHER", "planet_weather"))
 
 
 def _planet_weather_path(planet_id: str, lat: str, lon: str) -> Path:

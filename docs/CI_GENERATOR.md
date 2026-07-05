@@ -100,7 +100,7 @@ The same intent is rendered into both CI platforms.
 
 ## Verification Commands
 
-Run from Continuum repo root:
+Run from Continuuuum repo root:
 
 ```bash
 npm run ci:generate

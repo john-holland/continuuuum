@@ -1,6 +1,6 @@
 # Entropy Claims and Evidence Policy
 
-This policy governs public claims, contract assertions, and release gates for entropy quality messaging in Continuum.
+This policy governs public claims, contract assertions, and release gates for entropy quality messaging in Continuuuum.
 
 ## Policy Intent
 

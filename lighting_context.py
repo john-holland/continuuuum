@@ -107,7 +107,7 @@ class OpenMeteoWeatherAdapter(WeatherAdapter):
                 "past_days": 1,
             }
         )
-        req = urllib.request.Request(f"{base}?{qs}", headers={"User-Agent": "ContinuumLighting/1.0"})
+        req = urllib.request.Request(f"{base}?{qs}", headers={"User-Agent": "ContinuuuumLighting/1.0"})
         with urllib.request.urlopen(req, timeout=8) as r:
             payload = json.loads(r.read().decode("utf-8"))
         hourly = payload.get("hourly") or {}

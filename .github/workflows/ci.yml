@@ -1,4 +1,4 @@
-name: continuum-ci
+name: continuuuum-ci
 
 on:
   workflow_dispatch:
@@ -71,7 +71,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           python -m compileall .
-          python -m zipfile -c continuum_artifacts.zip README.md DEPENDENCIES.md requirements.txt
+          python -m zipfile -c continuuuum_artifacts.zip README.md DEPENDENCIES.md requirements.txt
 
   security_scan:
     name: Security Scan

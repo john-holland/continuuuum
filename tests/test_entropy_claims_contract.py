@@ -15,7 +15,7 @@ if str(_repo_root) not in sys.path:
 # Use temp DB for ring test so we don't touch a real DB
 _tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
 _tmp.close()
-os.environ.setdefault("CONTINUUM_DB_PATH", _tmp.name)
+os.environ.setdefault("CONTINUUUUM_DB_PATH", _tmp.name)
 
 from serve_library import (  # noqa: E402
     app,

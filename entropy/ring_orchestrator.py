@@ -9,7 +9,7 @@ from .center_target import CenterObjectTarget
 from .node_registry import NodeRegistry
 
 if TYPE_CHECKING:
-    from unified_semantic_archiver.db import ContinuumDb
+    from unified_semantic_archiver.db import ContinuuuumDb
 
 
 def _default_query_node(node_id: str, base_url: str, timeout: float = 2.0) -> bool:
@@ -30,7 +30,7 @@ class RingOrchestrator:
 
     def __init__(
         self,
-        db: ContinuumDb,
+        db: ContinuuuumDb,
         center: CenterObjectTarget | None = None,
         node_base_urls: dict[str, str] | None = None,
         query_node: Callable[[str, str], bool] | None = None,

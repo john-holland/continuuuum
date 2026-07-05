@@ -1,8 +1,8 @@
 {
-  "name": "continuum-ci-tooling",
+  "name": "continuuuum-ci-tooling",
   "private": true,
   "version": "0.1.0",
-  "description": "Tooling scripts for Continuum CI generation.",
+  "description": "Tooling scripts for Continuuuum CI generation.",
   "scripts": {
     "ci:generate": "node tools/ci-gen/generate-ci.mjs",
     "ci:check": "node tools/ci-gen/generate-ci.mjs --check",

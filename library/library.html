@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Continuum Library</title>
-  <link rel="stylesheet" href="/static/shared/continuum-nav/continuum-nav.css">
+  <title>Continuuuum Library</title>
+  <link rel="stylesheet" href="/static/shared/continuuuum-nav/continuuuum-nav.css">
   <link rel="stylesheet" href="/static/shared/vendor/leaflet/leaflet.css">
   <style>
     * { box-sizing: border-box; }
@@ -53,7 +53,7 @@
   <script src="/static/shared/vendor/d3.min.js"></script>
 </head>
 <body>
-  <div id="continuum-nav-root"></div>
+  <div id="continuuuum-nav-root"></div>
   <div class="toolbar">
     <button type="button" id="tab-geo" class="tab-btn active" aria-pressed="true">Geo</button>
     <button type="button" id="tab-spatial" class="tab-btn" aria-pressed="false">Spatial</button>
@@ -89,7 +89,7 @@
       <option value="4d">4D (S*.O*)</option>
     </select>
     <button type="button" id="btn-spatial-load" class="spatial-hidden">Load spatial</button>
-    <input type="text" id="lemma-api-base" placeholder="Lemma API URL" style="width:150px" title="Drawer 2 continuum_api base URL">
+    <input type="text" id="lemma-api-base" placeholder="Lemma API URL" style="width:150px" title="Drawer 2 continuuuum_api base URL">
   </div>
 
   <div class="layout">
@@ -125,7 +125,7 @@
       </div>
       <div id="upload-panel" class="hidden">
         <h3>USC asset import</h3>
-        <p style="font-size:13px;color:#8892b0;margin:0 0 12px">Upload media and metadata to the Continuum library. File is optional for empty USC placeholders (metadata-only). For the Unity WebGL editor, use <a href="/continuum_editor/" style="color:#8af">Continuum editor</a>.</p>
+        <p style="font-size:13px;color:#8892b0;margin:0 0 12px">Upload media and metadata to the Continuuuum library. File is optional for empty USC placeholders (metadata-only). For the Unity WebGL editor, use <a href="/continuuuum_editor/" style="color:#8af">Continuuuum editor</a>.</p>
         <div class="upload-zone" id="upload-zone">Drop file here or click to choose (optional for empty placeholder)</div>
         <input type="file" id="upload-file" class="hidden">
         <div class="meta-form">
@@ -491,7 +491,7 @@
       window.open(buildLemmaLibraryUrl(base, hash, libraryBase), '_blank');
     } catch (e) {
       const hint = e.status === 404
-        ? 'Lemma API not found at ' + base + '. Start continuum_api or set Lemma API URL.'
+        ? 'Lemma API not found at ' + base + '. Start continuuuum_api or set Lemma API URL.'
         : (e.message || 'Lemma lookup failed');
       showLemmaLookupMsg(hint, 'error');
     } finally {
@@ -787,15 +787,15 @@
   doSearch();
 })();
   </script>
-  <script src="/static/shared/continuum-user-session/continuum-user-session.js"></script>
-  <script src="/static/shared/continuum-cave-shell/continuum-cave-shell.js"></script>
-  <script src="/static/shared/continuum-cave-shell/continuum-tome-bootstrap.js"></script>
-  <script src="/static/shared/continuum-nav/continuum-nav.js"></script>
+  <script src="/static/shared/continuuuum-user-session/continuuuum-user-session.js"></script>
+  <script src="/static/shared/continuuuum-cave-shell/continuuuum-cave-shell.js"></script>
+  <script src="/static/shared/continuuuum-cave-shell/continuuuum-tome-bootstrap.js"></script>
+  <script src="/static/shared/continuuuum-nav/continuuuum-nav.js"></script>
   <script>
     var navParams = new URLSearchParams(location.search);
     var navApp = (navParams.get('panel') === 'upload' || navParams.get('upload') === '1') ? 'import' : 'library';
-    ContinuumNav.mount({ app: navApp, theme: 'dark' });
-    if (window.ContinuumTomeBootstrap) ContinuumTomeBootstrap.mountPage({ tomeId: 'library-tome' });
+    ContinuuuumNav.mount({ app: navApp, theme: 'dark' });
+    if (window.ContinuuuumTomeBootstrap) ContinuuuumTomeBootstrap.mountPage({ tomeId: 'library-tome' });
     document.getElementById('lemma-api-base')?.addEventListener('change', function () {
       var v = this.value.trim();
       if (v) localStorage.setItem('lemmaApiBase', v.replace(/\/$/, ''));

@@ -13,7 +13,7 @@ if str(_repo) not in sys.path:
     sys.path.insert(0, str(_repo))
 
 pytest.importorskip("unified_semantic_archiver.db")
-from unified_semantic_archiver.db import ContinuumDb, get_connection, init_schema
+from unified_semantic_archiver.db import ContinuuuumDb, get_connection, init_schema
 
 from entropy import CenterObjectTarget, NodeRegistry, RingOrchestrator
 from entropy.credit_ledger import CreditLedger
@@ -25,18 +25,18 @@ def entropy_db():
     fd, path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     try:
-        prev = os.environ.get("CONTINUUM_DB_PATH")
-        os.environ["CONTINUUM_DB_PATH"] = path
+        prev = os.environ.get("CONTINUUUUM_DB_PATH")
+        os.environ["CONTINUUUUM_DB_PATH"] = path
         conn = get_connection(path)
         init_schema(conn)
         conn.close()
-        db = ContinuumDb(path)
+        db = ContinuuuumDb(path)
         yield db
     finally:
         if prev is not None:
-            os.environ["CONTINUUM_DB_PATH"] = prev
+            os.environ["CONTINUUUUM_DB_PATH"] = prev
         else:
-            os.environ.pop("CONTINUUM_DB_PATH", None)
+            os.environ.pop("CONTINUUUUM_DB_PATH", None)
         try:
             os.unlink(path)
         except OSError:
