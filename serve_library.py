@@ -6,6 +6,7 @@ Run: pip install -e ../unified-semantic-compressor && python serve_library.py
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 import socket
@@ -16,8 +17,11 @@ import urllib.parse
 from datetime import datetime, timezone
 from pathlib import Path
 
-from flask import Flask, request, jsonify, send_file, redirect, Response
+from flask import Flask, request, jsonify, send_file, redirect, Response, send_from_directory
 from lighting_context import LightingContextService
+from spatial_routes import register_spatial_routes
+
+logger = logging.getLogger(__name__)
 
 try:
     from unified_semantic_archiver.db import ContinuumDb
@@ -100,8 +104,16 @@ except ImportError:
 _here = Path(__file__).resolve().parent
 app = Flask(__name__, static_folder=str(_here / "library"), static_url_path="")
 LIBRARY_HTML = _here / "library" / "library.html"
+WEBGL_EDITOR_INDEX = _here / "library" / "continuum_editor_webgl" / "index.html"
+SHARED_STATIC = Path(
+    os.environ.get(
+        "CONTINUUM_SHARED_STATIC",
+        str(_here.parent / "Drawer 2" / "Scripts" / "continuum_api" / "static" / "shared"),
+    )
+)
 
 DB_PATH = os.environ.get("CONTINUUM_DB_PATH") or str(_here / "continuum.db")
+register_spatial_routes(app, lambda: DB_PATH)
 UPLOADS_DIR = Path(os.environ.get("CONTINUUM_LIBRARY_UPLOADS") or str(_here / "library_uploads"))
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -470,6 +482,13 @@ def optional_api_key():
     return None
 
 
+@app.route("/static/shared/<path:subpath>")
+def shared_static(subpath):
+    if not SHARED_STATIC.is_dir():
+        return jsonify({"error": "shared static not found", "path": str(SHARED_STATIC)}), 404
+    return send_from_directory(SHARED_STATIC, subpath)
+
+
 @app.route("/")
 @app.route("/library")
 def index():
@@ -480,8 +499,12 @@ def index():
 
 @app.route("/continuum_editor/")
 def continuum_editor_webgl_entry():
-    """Shortcut to the Unity WebGL Continuum Library UI under static library/."""
-    return redirect("/library/continuum_editor_webgl/index.html")
+    """Shortcut to the Unity WebGL Continuum Library UI, or file upload when WebGL is not built."""
+    if WEBGL_EDITOR_INDEX.is_file():
+        return redirect("/library/continuum_editor_webgl/index.html")
+    params = request.args.to_dict(flat=True)
+    params["panel"] = "upload"
+    return redirect("/library?" + urllib.parse.urlencode(params))
 
 
 @app.route("/api/library/search")
@@ -508,6 +531,19 @@ def search():
         return jsonify({"error": str(e)}), 500
 
 
+def _upload_warnings(blob_ref: str | None, type_metadata: dict) -> list[str]:
+    """Collect non-fatal warnings for metadata-only / empty USC placeholder uploads."""
+    warnings: list[str] = []
+    meta = type_metadata if isinstance(type_metadata, dict) else {}
+    has_title = bool(str(meta.get("title") or "").strip())
+    has_props = any(str(v).strip() for v in meta.values() if v is not None)
+    if not blob_ref:
+        warnings.append("no file attached (empty USC placeholder)")
+    if not has_title and not has_props:
+        warnings.append("no title or metadata properties set")
+    return warnings
+
+
 @app.route("/api/library/upload", methods=["POST"])
 def upload():
     try:
@@ -525,6 +561,7 @@ def upload():
             type_metadata = {}
         if not isinstance(type_metadata, dict):
             type_metadata = {}
+        user_metadata = dict(type_metadata)
         blob_ref = None
         if "file" in request.files and request.files["file"].filename:
             f = request.files["file"]
@@ -573,7 +610,20 @@ def upload():
             lon=lon,
             altitude_m=altitude_m,
         )
-        return jsonify({"id": doc_id, "url": url or (f"/api/library/documents/{doc_id}/download" if doc_id else None)}), 201
+        warnings = _upload_warnings(blob_ref, user_metadata)
+        if warnings:
+            logger.warning(
+                "USC library upload id=%s type=%s warnings=%s metadata=%s",
+                doc_id,
+                document_type,
+                warnings,
+                user_metadata,
+            )
+        return jsonify({
+            "id": doc_id,
+            "url": url or (f"/api/library/documents/{doc_id}/download" if doc_id else None),
+            "warnings": warnings,
+        }), 201
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 

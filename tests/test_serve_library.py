@@ -120,6 +120,9 @@ def test_upload_then_fetch():
     assert r.status_code == 201
     data = r.get_json()
     assert "id" in data
+    assert "warnings" in data
+    assert "no file attached" in data["warnings"][0]
+    assert "no title or metadata properties" in data["warnings"][-1]
     doc_id = data["id"]
 
     with app.test_client() as client:

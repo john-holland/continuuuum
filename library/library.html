@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Continuum Library</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="/static/shared/continuum-nav/continuum-nav.css">
+  <link rel="stylesheet" href="/static/shared/vendor/leaflet/leaflet.css">
   <style>
     * { box-sizing: border-box; }
     body { font-family: system-ui, sans-serif; margin: 0; padding: 12px; background: #1a1a2e; color: #eee; min-height: 100vh; }
@@ -34,14 +35,31 @@
     .msg { padding: 8px; border-radius: 8px; margin: 8px 0; }
     .msg.error { background: rgba(255,100,100,0.2); color: #f88; }
     .msg.success { background: rgba(100,255,100,0.2); color: #8f8; }
+    .msg.warn { background: rgba(255,200,80,0.15); color: #fc8; }
     .preview-img { max-width: 100%; max-height: 200px; border-radius: 8px; }
     .doc-type-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #444; }
+    .tab-btn { background: #444; }
+    .tab-btn.active { background: #667eea; }
+    #spatial-map { width: 100%; min-height: 420px; border-radius: 8px; background: #12121f; }
+    #spatial-map svg { display: block; width: 100%; height: 420px; }
+    #spatial-map g.cell.selected rect { stroke: #667eea; stroke-width: 3; }
+    .spatial-detail { font-size: 13px; line-height: 1.5; }
+    .spatial-detail h4 { margin: 12px 0 6px; }
+    .chip-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #3a3a55; }
+    .geo-only.spatial-hidden { display: none !important; }
+    #spatial-view.spatial-hidden { display: none !important; }
   </style>
+  <script src="/static/shared/vendor/d3.min.js"></script>
 </head>
 <body>
+  <div id="continuum-nav-root"></div>
   <div class="toolbar">
-    <input type="search" id="search-q" placeholder="Search..." aria-label="Search">
-    <select id="filter-type" aria-label="Document type">
+    <button type="button" id="tab-geo" class="tab-btn active" aria-pressed="true">Geo</button>
+    <button type="button" id="tab-spatial" class="tab-btn" aria-pressed="false">Spatial</button>
+    <span class="geo-only" style="width:8px"></span>
+    <input type="search" id="search-q" class="geo-only" placeholder="Search..." aria-label="Search">
+    <select id="filter-type" class="geo-only" aria-label="Document type">
       <option value="">All types</option>
       <option value="video">Video</option>
       <option value="document">Document</option>
@@ -50,9 +68,9 @@
       <option value="program">Program</option>
       <option value="data">Data</option>
     </select>
-    <input type="number" id="search-lat" placeholder="Lat" step="any" style="width:90px" aria-label="Latitude">
-    <input type="number" id="search-lon" placeholder="Lon" step="any" style="width:90px" aria-label="Longitude">
-    <select id="search-distance" aria-label="Distance">
+    <input type="number" id="search-lat" class="geo-only" placeholder="Lat" step="any" style="width:90px" aria-label="Latitude">
+    <input type="number" id="search-lon" class="geo-only" placeholder="Lon" step="any" style="width:90px" aria-label="Longitude">
+    <select id="search-distance" class="geo-only" aria-label="Distance">
       <option value="infinite">Infinite</option>
       <option value="0">Same bucket (0 mi)</option>
       <option value="10">10 mi</option>
@@ -60,15 +78,31 @@
       <option value="500">500 mi</option>
       <option value="24000">24000 mi</option>
     </select>
-    <button type="button" id="btn-search">Search</button>
-    <button type="button" id="btn-upload-open" class="secondary">Upload</button>
+    <button type="button" id="btn-search" class="geo-only">Search</button>
+    <button type="button" id="btn-upload-open" class="secondary geo-only">Upload</button>
+    <input type="text" id="spatial-episode-id" class="spatial-hidden" placeholder="Episode ID" style="width:180px" title="Filter spatial tree by episode">
+    <input type="search" id="spatial-synonym" class="spatial-hidden" placeholder="Synonym filter" style="width:140px">
+    <select id="spatial-tree-type" class="spatial-hidden" aria-label="Tree type">
+      <option value="">All trees</option>
+      <option value="quad">Quad (Q*)</option>
+      <option value="oct">Oct (O*)</option>
+      <option value="4d">4D (S*.O*)</option>
+    </select>
+    <button type="button" id="btn-spatial-load" class="spatial-hidden">Load spatial</button>
+    <input type="text" id="lemma-api-base" placeholder="Lemma API URL" style="width:150px" title="Drawer 2 continuum_api base URL">
   </div>
 
   <div class="layout">
     <div class="panel">
-      <div id="map"></div>
-      <h3>Results</h3>
-      <ul class="results-list" id="results-list"></ul>
+      <div id="geo-view">
+        <div id="map"></div>
+        <h3>Results</h3>
+        <ul class="results-list" id="results-list"></ul>
+      </div>
+      <div id="spatial-view" class="spatial-hidden">
+        <div id="spatial-map"></div>
+        <p id="spatial-status" style="font-size:12px;color:#8892b0;margin:8px 0 0"></p>
+      </div>
     </div>
     <div class="panel">
       <div id="viewer-panel">
@@ -79,12 +113,20 @@
           <div class="viewer-section">
             <h4>Metadata</h4>
             <div id="viewer-meta" class="meta-form"></div>
+            <button type="button" id="btn-lemma-lookup" class="secondary" style="margin-top:8px">Look up lemma</button>
+            <div id="lemma-lookup-msg" class="msg hidden" style="margin-top:8px"></div>
+            <button type="button" id="btn-show-spatial" class="secondary" style="margin-top:8px;margin-left:8px">Show on spatial map</button>
           </div>
+        </div>
+        <div id="spatial-detail-panel" class="spatial-detail hidden">
+          <h3>Bucket detail</h3>
+          <div id="spatial-detail-content"></div>
         </div>
       </div>
       <div id="upload-panel" class="hidden">
-        <h3>Upload</h3>
-        <div class="upload-zone" id="upload-zone">Drop file here or click to choose</div>
+        <h3>USC asset import</h3>
+        <p style="font-size:13px;color:#8892b0;margin:0 0 12px">Upload media and metadata to the Continuum library. File is optional for empty USC placeholders (metadata-only). For the Unity WebGL editor, use <a href="/continuum_editor/" style="color:#8af">Continuum editor</a>.</p>
+        <div class="upload-zone" id="upload-zone">Drop file here or click to choose (optional for empty placeholder)</div>
         <input type="file" id="upload-file" class="hidden">
         <div class="meta-form">
           <label>Document type</label>
@@ -96,6 +138,7 @@
             <option value="program">Program</option>
             <option value="data">Data</option>
           </select>
+          <label>Title <input type="text" id="upload-title" placeholder="Display title for map and lemma lookup"></label>
           <div class="location-block">
             <div><label>Lat</label><input type="number" id="upload-lat" step="any" placeholder="Lat"></div>
             <div><label>Lon</label><input type="number" id="upload-lon" step="any" placeholder="Lon"></div>
@@ -110,12 +153,12 @@
     </div>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="/static/shared/vendor/leaflet/leaflet.js"></script>
   <script>
 (function() {
   const DOC_TYPES = ['video','document','audio','image','program','data'];
   const TYPE_FIELDS = {
-    video: ['title','publish_year','publisher','studio_created','url'],
+    video: ['publish_year','publisher','studio_created','url'],
     document: ['language','embedded_languages','author','publish_year','url'],
     audio: ['artist','studio_created','url'],
     image: ['format','style','artist','studio_created','url','important_colors'],
@@ -131,11 +174,362 @@
   let currentResults = [];
   let selectedId = null;
   let uploadFile = null;
+  let activeTab = 'geo';
+  let spatialTreeData = null;
+  let selectedBucketNode = null;
+  let spatialSvg = null;
+  let spatialG = null;
+  let spatialZoom = null;
+  let spatialCellsByBucket = {};
+
+  function setActiveTab(tab) {
+    activeTab = tab;
+    const geo = tab === 'geo';
+    document.getElementById('tab-geo').classList.toggle('active', geo);
+    document.getElementById('tab-spatial').classList.toggle('active', !geo);
+    document.getElementById('tab-geo').setAttribute('aria-pressed', geo ? 'true' : 'false');
+    document.getElementById('tab-spatial').setAttribute('aria-pressed', geo ? 'false' : 'true');
+    document.querySelectorAll('.geo-only').forEach(el => el.classList.toggle('spatial-hidden', !geo));
+    document.querySelectorAll('#spatial-episode-id, #spatial-synonym, #spatial-tree-type, #btn-spatial-load')
+      .forEach(el => el.classList.toggle('spatial-hidden', geo));
+    document.getElementById('geo-view').classList.toggle('hidden', !geo);
+    document.getElementById('spatial-view').classList.toggle('spatial-hidden', geo);
+    if (geo) {
+      document.getElementById('viewer-panel').classList.remove('hidden');
+      document.getElementById('spatial-detail-panel').classList.add('hidden');
+      selectedBucketNode = null;
+      if (map) {
+        setTimeout(() => {
+          map.invalidateSize();
+          const doc = currentResults.find(r => r.id === selectedId);
+          if (doc) panMapToDocument(doc);
+        }, 0);
+      }
+    } else {
+      document.getElementById('viewer-panel').classList.toggle('hidden', !!selectedBucketNode);
+      document.getElementById('spatial-detail-panel').classList.toggle('hidden', !selectedBucketNode);
+      loadSpatialTree();
+    }
+  }
+
+  function synonymColorScale(nodes) {
+    const syns = new Set();
+    function walk(n) {
+      (n.maskSynonyms || []).forEach(s => syns.add(s));
+      (n.children || []).forEach(walk);
+    }
+    walk(nodes);
+    return d3.scaleOrdinal(d3.schemeTableau10).domain([...syns]);
+  }
+
+  function spatialBucketKey(data) {
+    return data.bucketId || data.name || '';
+  }
+
+  function panSpatialToBucket(bucketId) {
+    const d = spatialCellsByBucket[bucketId];
+    if (!d || !spatialSvg || !spatialZoom) return;
+    const host = document.getElementById('spatial-map');
+    const width = host.clientWidth || 640;
+    const height = 420;
+    const x = (d.x0 + d.x1) / 2;
+    const y = (d.y0 + d.y1) / 2;
+    const cellW = Math.max(d.x1 - d.x0, 1);
+    const cellH = Math.max(d.y1 - d.y0, 1);
+    const scale = Math.min(40, Math.max(2, 0.85 / Math.max(cellW / width, cellH / height)));
+    const transform = d3.zoomIdentity
+      .translate(width / 2, height / 2)
+      .scale(scale)
+      .translate(-x, -y);
+    spatialSvg.transition().duration(450).call(spatialZoom.transform, transform);
+    spatialG.selectAll('g.cell').classed('selected', n => spatialBucketKey(n.data) === bucketId);
+  }
+
+  function renderSpatialTree(tree) {
+    const host = document.getElementById('spatial-map');
+    host.innerHTML = '';
+    spatialSvg = null;
+    spatialG = null;
+    spatialZoom = null;
+    spatialCellsByBucket = {};
+    if (!tree || !tree.children || !tree.children.length) {
+      host.innerHTML = '<p style="padding:16px;color:#8892b0">No bucket data. Enter an episode ID with render masks or episode assets.</p>';
+      return;
+    }
+    const width = host.clientWidth || 640;
+    const height = 420;
+    const root = d3.hierarchy(tree).sum(d => (d.children && d.children.length) ? 0 : 1);
+    d3.partition().size([width, height])(root);
+    const color = synonymColorScale(tree);
+    spatialSvg = d3.select(host).append('svg').attr('viewBox', `0 0 ${width} ${height}`);
+    spatialZoom = d3.zoom()
+      .scaleExtent([1, 40])
+      .on('zoom', (event) => spatialG.attr('transform', event.transform));
+    spatialSvg.call(spatialZoom);
+    spatialG = spatialSvg.append('g');
+    const cell = spatialG.selectAll('g')
+      .data(root.descendants().filter(d => d.depth > 0))
+      .join('g')
+      .attr('class', 'cell')
+      .attr('transform', d => `translate(${d.x0},${d.y0})`)
+      .each(function(d) {
+        const key = spatialBucketKey(d.data);
+        if (key) spatialCellsByBucket[key] = d;
+      });
+    cell.append('rect')
+      .attr('width', d => Math.max(0, d.x1 - d.x0 - 1))
+      .attr('height', d => Math.max(0, d.y1 - d.y0 - 1))
+      .attr('fill', d => {
+        const syns = d.data.maskSynonyms || [];
+        return syns.length ? color(syns[0]) : '#3a3a55';
+      })
+      .attr('stroke', '#1a1a2e')
+      .style('cursor', 'pointer')
+      .on('click', (ev, d) => selectBucketNode(d.data));
+    cell.append('text')
+      .attr('x', 4)
+      .attr('y', 14)
+      .attr('fill', '#eee')
+      .attr('font-size', 10)
+      .text(d => {
+        const w = d.x1 - d.x0;
+        if (w < 28) return '';
+        return (d.data.name || '').slice(0, Math.floor(w / 7));
+      });
+    if (selectedBucketNode) {
+      const bucketId = spatialBucketKey(selectedBucketNode);
+      if (bucketId) requestAnimationFrame(() => panSpatialToBucket(bucketId));
+    }
+  }
+
+  function selectBucketNode(node) {
+    selectedBucketNode = node;
+    panSpatialToBucket(spatialBucketKey(node));
+    document.getElementById('viewer-panel').classList.add('hidden');
+    document.getElementById('spatial-detail-panel').classList.remove('hidden');
+    const el = document.getElementById('spatial-detail-content');
+    const syns = (node.maskSynonyms || []).map(s => `<span class="chip">${s}</span>`).join('') || '<em>None</em>';
+    const usc = (node.uscAssetIds || []).map(id => `<a href="#" data-doc-id="${id}" class="chip usc-link">${id}</a>`).join('') || '<em>None</em>';
+    el.innerHTML = `
+      <p><strong>Bucket:</strong> <code>${node.bucketId || node.name}</code></p>
+      <p><strong>Kind:</strong> ${node.kind || '—'}</p>
+      <h4>Render mask synonyms</h4>
+      <div class="chip-list">${syns}</div>
+      <h4>USC assets</h4>
+      <div class="chip-list">${usc}</div>
+    `;
+    el.querySelectorAll('.usc-link').forEach(a => {
+      a.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        setActiveTab('geo');
+        selectDocumentByHighlight(a.dataset.docId);
+      });
+    });
+  }
+
+  async function loadSpatialTree() {
+    const status = document.getElementById('spatial-status');
+    const episodeId = document.getElementById('spatial-episode-id').value.trim();
+    const treeType = document.getElementById('spatial-tree-type').value;
+    const synonym = document.getElementById('spatial-synonym').value.trim();
+    const params = new URLSearchParams();
+    if (episodeId) params.set('episodeId', episodeId);
+    if (treeType) params.set('treeType', treeType);
+    status.textContent = 'Loading…';
+    try {
+      const r = await api('/api/spatial/bucket-tree?' + params.toString());
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error || r.statusText);
+      spatialTreeData = data.tree;
+      if (synonym) {
+        spatialTreeData = filterTreeBySynonym(data.tree, synonym.toLowerCase());
+      }
+      renderSpatialTree(spatialTreeData);
+      status.textContent = `${data.bucketCount || 0} buckets` + (episodeId ? ` · episode ${episodeId}` : '');
+      const hl = new URLSearchParams(location.search).get('highlight');
+      if (hl && data.bucketIds && data.bucketIds.includes(hl)) {
+        highlightBucketInTree(hl);
+      }
+    } catch (e) {
+      status.textContent = e.message || 'Load failed';
+      document.getElementById('spatial-map').innerHTML = '';
+    }
+  }
+
+  function filterTreeBySynonym(node, q) {
+    if (!node) return null;
+    const kids = (node.children || []).map(c => filterTreeBySynonym(c, q)).filter(Boolean);
+    const syns = (node.maskSynonyms || []).some(s => s.toLowerCase().includes(q));
+    const match = syns || node.name.toLowerCase().includes(q);
+    if (match || kids.length) {
+      const out = { ...node };
+      if (kids.length) out.children = kids;
+      else delete out.children;
+      return out;
+    }
+    return null;
+  }
+
+  function highlightBucketInTree(bucketId) {
+    function find(n) {
+      if (n.bucketId === bucketId) return n;
+      for (const c of (n.children || [])) {
+        const f = find(c);
+        if (f) return f;
+      }
+      return null;
+    }
+    if (!spatialTreeData) return;
+    const node = find(spatialTreeData);
+    if (node) selectBucketNode(node);
+  }
+
+  async function selectDocumentByHighlight(token) {
+    const episodeId = document.getElementById('spatial-episode-id').value.trim();
+    let docId = token;
+    try {
+      const params = new URLSearchParams({ token });
+      if (episodeId) params.set('episodeId', episodeId);
+      const rr = await api('/api/spatial/resolve-highlight?' + params.toString());
+      const resolved = await rr.json();
+      if (resolved.libraryDocumentId) docId = String(resolved.libraryDocumentId);
+      if (resolved.bucketId && activeTab === 'spatial') highlightBucketInTree(resolved.bucketId);
+    } catch (_) {}
+    await doSearch();
+    const match = currentResults.find(d =>
+      String(d.id) === String(docId) ||
+      (d.url && d.url.includes(token)) ||
+      String(d.id) === String(token)
+    );
+    if (match) showViewer(match);
+  }
+
+  function getLemmaApiBase() {
+    const inp = document.getElementById('lemma-api-base');
+    const fromInput = inp && inp.value.trim();
+    const params = new URLSearchParams(location.search);
+    const base = fromInput || params.get('lemmaApiBase') || localStorage.getItem('lemmaApiBase') || 'http://127.0.0.1:5050';
+    if (inp && !fromInput) inp.value = base;
+    return base.replace(/\/$/, '');
+  }
+
+  function lemmaLookupTerm(doc, title) {
+    let meta = {};
+    try { meta = JSON.parse(doc.type_metadata || '{}'); } catch(_) {}
+    return meta.asset_word || meta.title || title || '';
+  }
+
+  function lemmaLookupEntryId(doc) {
+    let meta = {};
+    try { meta = JSON.parse(doc.type_metadata || '{}'); } catch(_) {}
+    return meta.lemma_id || meta.lemmaEntryId || meta.entryId || null;
+  }
+
+  function buildLemmaLibraryUrl(base, hash, libraryBase) {
+    return base + '/lemma-library?libraryBase=' + encodeURIComponent(libraryBase) + '#' + hash;
+  }
+
+  function showLemmaLookupMsg(text, kind) {
+    const el = document.getElementById('lemma-lookup-msg');
+    if (!el) return;
+    if (!text) {
+      el.textContent = '';
+      el.className = 'msg hidden';
+      return;
+    }
+    el.textContent = text;
+    el.className = 'msg ' + (kind || 'error');
+  }
+
+  async function lemmaApiFetch(base, path) {
+    const r = await fetch(base + path, { credentials: 'include' });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const err = new Error(data.error || r.statusText || ('HTTP ' + r.status));
+      err.status = r.status;
+      throw err;
+    }
+    return data;
+  }
+
+  function pickLemmaRedirectHash(term, items) {
+    const termLc = term.trim().toLowerCase();
+    const exact = items.find(it => (it.term || it.word || '').toLowerCase() === termLc);
+    if (exact && exact.id) return 'entry/' + encodeURIComponent(exact.id);
+    if (items.length === 1 && items[0].id) return 'entry/' + encodeURIComponent(items[0].id);
+    return 'browse?q=' + encodeURIComponent(term);
+  }
+
+  async function openLemmaLookup(doc, title, btn) {
+    const base = getLemmaApiBase();
+    localStorage.setItem('lemmaApiBase', base);
+    const term = lemmaLookupTerm(doc, title).trim();
+    if (!term) {
+      showLemmaLookupMsg('No lemma term found in document metadata.', 'error');
+      return;
+    }
+    const libraryBase = location.origin + location.pathname;
+    const prevLabel = btn && btn.textContent;
+    showLemmaLookupMsg('');
+    if (btn) { btn.disabled = true; btn.textContent = 'Searching…'; }
+    try {
+      const entryId = lemmaLookupEntryId(doc);
+      if (entryId) {
+        try {
+          const entry = await lemmaApiFetch(base, '/api/thesaurus/entries?entryId=' + encodeURIComponent(entryId));
+          if (entry && entry.id) {
+            window.open(buildLemmaLibraryUrl(base, 'entry/' + encodeURIComponent(entry.id), libraryBase), '_blank');
+            return;
+          }
+        } catch (e) {
+          if (e.status !== 404) throw e;
+        }
+      }
+      const data = await lemmaApiFetch(base, '/api/thesaurus/entries?q=' + encodeURIComponent(term) + '&limit=12');
+      const items = data.items || [];
+      const hash = pickLemmaRedirectHash(term, items);
+      window.open(buildLemmaLibraryUrl(base, hash, libraryBase), '_blank');
+    } catch (e) {
+      const hint = e.status === 404
+        ? 'Lemma API not found at ' + base + '. Start continuum_api or set Lemma API URL.'
+        : (e.message || 'Lemma lookup failed');
+      showLemmaLookupMsg(hint, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = prevLabel || 'Look up lemma'; }
+    }
+  }
 
   function initMap() {
     if (map) return;
+    var iconBase = '/static/shared/vendor/leaflet/images/';
+    delete L.Icon.Default.prototype._getIconUrl;
+    L.Icon.Default.mergeOptions({
+      iconUrl: iconBase + 'marker-icon.png',
+      iconRetinaUrl: iconBase + 'marker-icon-2x.png',
+      shadowUrl: iconBase + 'marker-shadow.png',
+    });
     map = L.map('map').setView([40.7, -74], 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+  }
+
+  function updateMapMarkerStyles() {
+    mapMarkers.forEach(m => {
+      const selected = selectedId != null && m.docId === selectedId;
+      m.setOpacity(selected ? 1 : 0.65);
+      m.setZIndexOffset(selected ? 1000 : 0);
+    });
+  }
+
+  function panMapToDocument(doc) {
+    if (!doc || doc.lat == null || doc.lon == null) return;
+    initMap();
+    const targetZoom = Math.max(map.getZoom(), 13);
+    if (map.flyTo) {
+      map.flyTo([doc.lat, doc.lon], targetZoom, { duration: 0.75 });
+    } else {
+      map.setView([doc.lat, doc.lon], targetZoom);
+    }
+    updateMapMarkerStyles();
   }
 
   function updateMapMarkers(results, centerLat, centerLon, distanceMi) {
@@ -154,6 +548,7 @@
       m.docId = r.id;
       mapMarkers.push(m);
     });
+    updateMapMarkerStyles();
   }
 
   function renderTypeFields(container, docType) {
@@ -172,9 +567,45 @@
     return obj;
   }
 
+  function collectUploadMetadata() {
+    const typeMetadata = getTypeMetadataFromForm(document.getElementById('upload-type-fields'));
+    const title = (document.getElementById('upload-title')?.value || '').trim();
+    if (title) typeMetadata.title = title;
+    return typeMetadata;
+  }
+
+  function uploadHasMeaningfulMetadata(typeMetadata) {
+    if (!typeMetadata || typeof typeMetadata !== 'object') return false;
+    return Object.keys(typeMetadata).some(k => String(typeMetadata[k] || '').trim());
+  }
+
+  function confirmEmptyUpload() {
+    return window.confirm(
+      'No file is attached and no title or metadata properties are set.\n\nUpload an empty USC placeholder anyway?'
+    );
+  }
+
+  function renderUploadMessage(msgEl, data, ok) {
+    if (!ok) {
+      msgEl.innerHTML = '<div class="msg error">' + (data.error || 'Upload failed') + '</div>';
+      return;
+    }
+    const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+    let html = '<div class="msg success">Uploaded. ID: ' + data.id + '</div>';
+    if (warnings.length) {
+      html += '<div class="msg warn">' + warnings.map(w => escHtml(String(w))).join('<br>') + '</div>';
+    }
+    msgEl.innerHTML = html;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
   function showViewer(doc) {
     if (!doc) return;
     selectedId = doc.id;
+    panMapToDocument(doc);
     document.querySelectorAll('#results-list li').forEach(li => { li.classList.toggle('selected', parseInt(li.dataset.id,10) === doc.id); });
     document.getElementById('viewer-empty').classList.add('hidden');
     document.getElementById('viewer-content').classList.remove('hidden');
@@ -194,6 +625,22 @@
       <p><strong>Location:</strong> ${doc.lat != null && doc.lon != null ? `${doc.lat}, ${doc.lon}` : '—'}</p>
       ${Object.entries(meta).map(([k,v]) => `<p><strong>${k}:</strong> ${v}</p>`).join('')}
     `;
+    const lemmaBtn = document.getElementById('btn-lemma-lookup');
+    if (lemmaBtn) lemmaBtn.onclick = () => openLemmaLookup(doc, title, lemmaBtn);
+    showLemmaLookupMsg('');
+    const spatialBtn = document.getElementById('btn-show-spatial');
+    if (spatialBtn) {
+      spatialBtn.onclick = () => {
+        setActiveTab('spatial');
+        const meta = (() => { try { return JSON.parse(doc.type_metadata || '{}'); } catch(_) { return {}; } })();
+        const token = String(doc.id);
+        const params = new URLSearchParams(location.search);
+        params.set('highlight', token);
+        history.replaceState(null, '', location.pathname + '?' + params.toString());
+        highlightBucketInTree(token);
+        loadSpatialTree();
+      };
+    }
   }
 
   function selectDocument(id) {
@@ -224,9 +671,21 @@
     }).join('');
     listEl.querySelectorAll('li').forEach(li => li.addEventListener('click', () => selectDocument(parseInt(li.dataset.id,10))));
     updateMapMarkers(currentResults, lat, lon, distance_mi);
+    const highlight = new URLSearchParams(location.search).get('highlight');
+    if (highlight) {
+      selectDocumentByHighlight(highlight);
+    }
   }
 
   document.getElementById('btn-search').addEventListener('click', doSearch);
+  document.getElementById('tab-geo').addEventListener('click', () => setActiveTab('geo'));
+  document.getElementById('tab-spatial').addEventListener('click', () => setActiveTab('spatial'));
+  document.getElementById('btn-spatial-load').addEventListener('click', loadSpatialTree);
+
+  const params = new URLSearchParams(location.search);
+  const epFromUrl = params.get('episodeId');
+  if (epFromUrl) document.getElementById('spatial-episode-id').value = epFromUrl;
+  if (params.get('view') === 'spatial') setActiveTab('spatial');
 
   document.getElementById('upload-type').addEventListener('change', function() {
     renderTypeFields(document.getElementById('upload-type-fields'), this.value);
@@ -264,7 +723,14 @@
     const lat = document.getElementById('upload-lat').value ? parseFloat(document.getElementById('upload-lat').value) : null;
     const lon = document.getElementById('upload-lon').value ? parseFloat(document.getElementById('upload-lon').value) : null;
     const alt = document.getElementById('upload-alt').value ? parseFloat(document.getElementById('upload-alt').value) : null;
-    const typeMetadata = getTypeMetadataFromForm(document.getElementById('upload-type-fields'));
+    const typeMetadata = collectUploadMetadata();
+    const msgEl = document.getElementById('upload-msg');
+    if (!uploadFile && !uploadHasMeaningfulMetadata(typeMetadata)) {
+      if (!confirmEmptyUpload()) {
+        msgEl.innerHTML = '<div class="msg warn">Upload cancelled.</div>';
+        return;
+      }
+    }
     const fd = new FormData();
     fd.append('document_type', docType);
     fd.append('lat', lat != null ? lat : '');
@@ -274,21 +740,31 @@
     if (uploadFile) fd.append('file', uploadFile);
     const r = await api('/api/library/upload', { method: 'POST', body: fd });
     const data = await r.json().catch(() => ({}));
-    const msgEl = document.getElementById('upload-msg');
     if (r.ok && data.id) {
-      msgEl.innerHTML = '<div class="msg success">Uploaded. ID: ' + data.id + '</div>';
-      uploadFile = null; uploadZone.textContent = 'Drop file here or click to choose';
+      renderUploadMessage(msgEl, data, true);
+      uploadFile = null;
+      uploadZone.textContent = 'Drop file here or click to choose (optional for empty placeholder)';
       doSearch();
     } else {
-      msgEl.innerHTML = '<div class="msg error">' + (data.error || r.statusText) + '</div>';
+      renderUploadMessage(msgEl, data, false);
     }
   });
 
-  document.getElementById('btn-upload-open').addEventListener('click', function() {
+  function setImportPanelUrl(active) {
+    const url = new URL(location.href);
+    if (active) url.searchParams.set('panel', 'upload');
+    else url.searchParams.delete('panel');
+    history.replaceState(null, '', url.pathname + url.search + url.hash);
+  }
+
+  function openUploadPanel() {
     document.getElementById('viewer-panel').classList.add('hidden');
     document.getElementById('upload-panel').classList.remove('hidden');
     renderTypeFields(document.getElementById('upload-type-fields'), document.getElementById('upload-type').value);
-  });
+    setImportPanelUrl(true);
+  }
+
+  document.getElementById('btn-upload-open').addEventListener('click', openUploadPanel);
 
   const backBtn = document.createElement('button');
   backBtn.textContent = 'Back to list';
@@ -297,13 +773,33 @@
   backBtn.onclick = () => {
     document.getElementById('upload-panel').classList.add('hidden');
     document.getElementById('viewer-panel').classList.remove('hidden');
+    setImportPanelUrl(false);
   };
   document.getElementById('upload-panel').appendChild(backBtn);
 
+  if (params.get('panel') === 'upload' || params.get('upload') === '1') {
+    openUploadPanel();
+  }
+
   initMap();
+  getLemmaApiBase();
   renderTypeFields(document.getElementById('upload-type-fields'), 'video');
   doSearch();
 })();
+  </script>
+  <script src="/static/shared/continuum-user-session/continuum-user-session.js"></script>
+  <script src="/static/shared/continuum-cave-shell/continuum-cave-shell.js"></script>
+  <script src="/static/shared/continuum-cave-shell/continuum-tome-bootstrap.js"></script>
+  <script src="/static/shared/continuum-nav/continuum-nav.js"></script>
+  <script>
+    var navParams = new URLSearchParams(location.search);
+    var navApp = (navParams.get('panel') === 'upload' || navParams.get('upload') === '1') ? 'import' : 'library';
+    ContinuumNav.mount({ app: navApp, theme: 'dark' });
+    if (window.ContinuumTomeBootstrap) ContinuumTomeBootstrap.mountPage({ tomeId: 'library-tome' });
+    document.getElementById('lemma-api-base')?.addEventListener('change', function () {
+      var v = this.value.trim();
+      if (v) localStorage.setItem('lemmaApiBase', v.replace(/\/$/, ''));
+    });
   </script>
 </body>
 </html>

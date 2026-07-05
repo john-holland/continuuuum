@@ -216,6 +216,55 @@ function assertLegalGateJob(config) {
   }
 }
 
+function validateTelecomPlaybooks() {
+  const telecomRoot = process.env.TELECOM_ROOT || path.resolve(REPO_ROOT, "..", "Drawer 2", "telecom");
+  const playbooksRoot = path.join(telecomRoot, "playbooks");
+  const schemaPath = path.join(telecomRoot, "schemas", "telecom-playbook.schema.json");
+  if (!fs.existsSync(playbooksRoot) || !fs.existsSync(schemaPath)) {
+    console.log("- Telecom playbooks: skipped (TELECOM_ROOT not found)");
+    return;
+  }
+  const schema = JSON.parse(readUtf8(schemaPath));
+  const ajv = makeAjv();
+  const validate = ajv.compile(schema);
+  const yamlFiles = [];
+  function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith(".yaml") || entry.name.endsWith(".yml")) yamlFiles.push(full);
+    }
+  }
+  walk(playbooksRoot);
+  for (const file of yamlFiles) {
+    const data = parseYaml(file);
+    if (!validate(data)) {
+      const issues = (validate.errors || [])
+        .slice(0, 10)
+        .map((e) => `${e.instancePath || "/"} ${e.message}`)
+        .join("\n");
+      throw new Error(`Telecom playbook validation failed (${file}):\n${issues}`);
+    }
+    for (const res of data.resources || []) {
+      const rel = res.path.replace(/^\.\.\//, "").replace(/^resources\//, "resources/");
+      const candidates = [
+        path.join(playbooksRoot, rel),
+        path.join(playbooksRoot, "resources", path.basename(rel)),
+        path.join(playbooksRoot, rel.replace(/^resources\//, "")),
+      ];
+      if (res.source === "representational_net") {
+        const siteId = res.siteId || path.basename(path.dirname(rel));
+        candidates.push(path.join(playbooksRoot, "resources", "sites", siteId, "manifest.json"));
+      }
+      const found = candidates.some((c) => fs.existsSync(c));
+      if (!found) {
+        throw new Error(`Telecom playbook resource missing: ${res.path} (from ${file})`);
+      }
+    }
+  }
+  console.log(`- Telecom playbooks: validated ${yamlFiles.length} YAML file(s)`);
+}
+
 async function main() {
   const config = JSON.parse(readUtf8(CONFIG_PATH));
 
@@ -236,6 +285,7 @@ async function main() {
   assertSemanticVariants(githubWorkflow, config);
   assertCircleWorkflowJobs(circleConfig, config);
   assertLegalComplianceDocs();
+  validateTelecomPlaybooks();
 
   console.log("CI pact checks passed:");
   console.log("- GitHub workflow matches schema and manual-only trigger contract");
